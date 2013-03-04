@@ -40,6 +40,19 @@ class Cli(cmd.Cmd):
     def do_page(self, line):
         pass
 
+    def do_describe(self, line):
+        cols = "column_name", "nullable", "data_type", "data_precision"
+        select = "SELECT " + ', '.join(cols) + " FROM user_tab_cols"
+        where = " WHERE table_name = :t"
+        print "Name          Null?         Type          "
+        print "------------- ------------- --------------"
+        self.cursor.execute(select + where, [line.upper()])
+        for name, null, type, precision in self.cursor:
+            null = 'NOT NULL' if null == 'N' else ''
+            precision = '(' + str(precision) + ')' if precision != None else ''
+            print "%13s %13s %13s" % (name, null, (type + precision))
+    do_desc = do_describe
+
     def default(self, line):
         sql = line if line[-1] != ';' else line[:-1]
         if not self.dryrun:
