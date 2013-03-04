@@ -11,10 +11,12 @@ RCDIR = '~/.sql'
 HISTFILE = RCDIR + '/history'
 
 def duration(d):
-    if d > 60:
-        seconds = d % 60
-    if d > 60 * 60:
-        minutes = d % 60 * 60
+    d = int(d)
+    seconds = "%02d s" %  (d % 60) if d % 60 != 0 else ''
+    minutes = "%02d min " % (d / 60 % 60) if d >= 60 else ''
+    hours = " %d h " % (d / 60 / 60 % 60) if d >= 60 * 60 else ''
+
+    return (hours + minutes + seconds).strip()
 
 class Cli(cmd.Cmd):
     def __init__(self, username, password, tns, dryrun):
@@ -46,7 +48,9 @@ class Cli(cmd.Cmd):
                 self.cursor.execute(sql)
                 for row in self.cursor:
                     print row
-                print time.time() - t
+                d = duration(time.time() - t)
+                if d:
+                    print d
             except cx_Oracle.DatabaseError, e:
                 print >>sys.stderr, e,
 
