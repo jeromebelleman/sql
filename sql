@@ -1,13 +1,14 @@
 #! /usr/bin/env python
 import argparse
-import sys, os.path
+import sys, os, os.path
 import cmd
 import readline
 import getpass
 import cx_Oracle
 import time
 
-HISTFILE = '~/.sql/history'
+RCDIR = '~/.sql'
+HISTFILE = RCDIR + '/history'
 
 def duration(d):
     if d > 60:
@@ -18,7 +19,8 @@ def duration(d):
 class Cli(cmd.Cmd):
     def __init__(self, username, password, tns, dryrun):
         cmd.Cmd.__init__(self)
-        readline.read_history_file(os.path.expanduser(HISTFILE))
+        if os.path.isfile(os.path.expanduser(HISTFILE)):
+            readline.read_history_file(os.path.expanduser(HISTFILE))
         self.prompt = '%s@%s%% ' % (username, tns)
         self.dryrun = dryrun
 
@@ -27,7 +29,7 @@ class Cli(cmd.Cmd):
                 self.connection = cx_Oracle.connect(username, password, tns)
                 self.cursor = self.connection.cursor()
             except cx_Oracle.DatabaseError, e:
-                print >>sys.stderr, e.message,
+                print >>sys.stderr, e,
                 sys.exit(1)
 
     def do_edit(self, line):
@@ -37,15 +39,16 @@ class Cli(cmd.Cmd):
         pass
 
     def default(self, line):
-        t = time.time()
         sql = line if line[-1] != ';' else line[:-1]
-        print sql
         if not self.dryrun:
-            self.cursor.execute(sql)
-            for row in self.cursor:
-                print row
-        print time.time() - t
-
+            try:
+                t = time.time()
+                self.cursor.execute(sql)
+                for row in self.cursor:
+                    print row
+                print time.time() - t
+            except cx_Oracle.DatabaseError, e:
+                print >>sys.stderr, e,
 
     def completedefault(self, text, line, begidx, endidx):
         matches = []
@@ -64,6 +67,9 @@ def main():
     p.add_argument('-u', '--user')
     p.add_argument('-z', '--dryrun', action='store_true')
     args = p.parse_args()
+
+    if not os.path.isdir(os.path.expanduser(RCDIR)):
+        os.mkdir(os.path.expanduser(RCDIR))
 
     try:
         if args.user:
