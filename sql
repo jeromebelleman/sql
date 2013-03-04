@@ -6,6 +6,7 @@ import readline
 import getpass
 import cx_Oracle
 import time
+import subprocess
 
 RCDIR = '~/.sql'
 HISTFILE = RCDIR + '/history'
@@ -18,21 +19,25 @@ def duration(d):
 
     return (hours + minutes + seconds).strip()
 
+def termw():
+    out, _ = subprocess.Popen(['stty', 'size'],
+                              stdout=subprocess.PIPE).communicate()
+    _, w = out.split()
+    return int(w)
+
 class Cli(cmd.Cmd):
-    def __init__(self, username, password, tns, dryrun):
+    def __init__(self, username, password, tns):
         cmd.Cmd.__init__(self)
         if os.path.isfile(os.path.expanduser(HISTFILE)):
             readline.read_history_file(os.path.expanduser(HISTFILE))
         self.prompt = '%s@%s%% ' % (username, tns)
-        self.dryrun = dryrun
 
-        if not self.dryrun:
-            try:
-                self.connection = cx_Oracle.connect(username, password, tns)
-                self.cursor = self.connection.cursor()
-            except cx_Oracle.DatabaseError, e:
-                print >>sys.stderr, e,
-                sys.exit(1)
+        try:
+            self.connection = cx_Oracle.connect(username, password, tns)
+            self.cursor = self.connection.cursor()
+        except cx_Oracle.DatabaseError, e:
+            print >>sys.stderr, e,
+            sys.exit(1)
 
     def do_edit(self, line):
         pass
@@ -55,17 +60,16 @@ class Cli(cmd.Cmd):
 
     def default(self, line):
         sql = line if line[-1] != ';' else line[:-1]
-        if not self.dryrun:
-            try:
-                t = time.time()
-                self.cursor.execute(sql)
-                for row in self.cursor:
-                    print row
-                d = duration(time.time() - t)
-                if d:
-                    print d
-            except cx_Oracle.DatabaseError, e:
-                print >>sys.stderr, e,
+        try:
+            t = time.time()
+            self.cursor.execute(sql)
+            for row in self.cursor:
+                print row
+            d = duration(time.time() - t)
+            if d:
+                print d
+        except cx_Oracle.DatabaseError, e:
+            print >>sys.stderr, e,
 
     def completedefault(self, text, line, begidx, endidx):
         matches = []
@@ -82,7 +86,6 @@ def main():
     p = argparse.ArgumentParser()
     p.add_argument('tns')
     p.add_argument('-u', '--user')
-    p.add_argument('-z', '--dryrun', action='store_true')
     args = p.parse_args()
 
     if not os.path.isdir(os.path.expanduser(RCDIR)):
@@ -98,7 +101,7 @@ def main():
         print
         sys.exit(0)
 
-    cli = Cli(username, password, args.tns, args.dryrun)
+    cli = Cli(username, password, args.tns)
     while True:
         try:
             cli.cmdloop()
