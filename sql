@@ -13,7 +13,8 @@ from datetime import datetime, date, timedelta
 RCDIR = '~/.sql'
 HISTFILE = RCDIR + '/history'
 # FIXME Doesn't handle joins yet
-RE = compile('.*FROM (?P<table>\S+).*', IGNORECASE)
+RETABLE = compile('.*FROM (?P<table>\S+).*', IGNORECASE)
+REPARAM = compile(':(?P<param>\w+)')
 SIZETIME = .2
 MAXWIDTH = 20
 
@@ -50,7 +51,7 @@ def table(cursor):
     # Lay out format
     fmt = ' '.join(('{:%d}' % (l if l < MAXWIDTH else MAXWIDTH) for l in lens))
 
-    # Headings
+    # Headers
     print fmt.format(*[name for name, _, _, _, _, _, _ in cursor.description])
     print ' '.join('-' * (l if l < MAXWIDTH else MAXWIDTH) for l in lens)
 
@@ -62,6 +63,10 @@ def table(cursor):
     for row in cursor:
         print fmt.format(*[str(r)[:MAXWIDTH] for r in row])
         rowc += 1
+
+    # Footers
+    print ' '.join('-' * (l if l < MAXWIDTH else MAXWIDTH) for l in lens)
+    print fmt.format(*[name for name, _, _, _, _, _, _ in cursor.description])
 
     print '\a'
 
@@ -129,7 +134,9 @@ class Cli(cmd.Cmd):
             # TODO Interrupt queries. Threads?
 
             # Query and display results
-            self.cursor.execute(sql, self.params)
+            params =REPARAM.findall(sql)
+            self.cursor.execute(sql, dict((p, self.params[p])
+                                          for p in self.params if p in params))
             rowc = table(self.cursor)
 
             # Time query and retrieval
@@ -143,7 +150,7 @@ class Cli(cmd.Cmd):
             print >>sys.stderr, e,
 
     def completedefault(self, text, line, begidx, endidx):
-        m = RE.match(line)
+        m = RETABLE.match(line)
         if m: # Only consider columns of specified table
             return [c.lower() for c in self.tables[m.group('table').lower()]
                     if c[:len(text)] == text.lower()]
