@@ -165,17 +165,13 @@ class Cli(cmd.Cmd):
         print "Display set parameters and their value"
 
     def do_describe(self, line):
-        # TODO Use table()?
-        cols = "column_name", "nullable", "data_type", "data_precision"
+        cols = 'column_name', 'nullable', 'data_type', \
+               'data_length', 'data_precision', 'data_scale'
         select = "SELECT " + ', '.join(cols) + " FROM user_tab_cols"
         where = " WHERE table_name = :t"
-        print "Name          Null?         Type          "
-        print "------------- ------------- --------------"
-        self.cursor.execute(select + where, [line.upper()])
-        for name, null, type, precision in self.cursor:
-            null = 'NOT NULL' if null == 'N' else ''
-            precision = '(' + str(precision) + ')' if precision != None else ''
-            print "%13s %13s %13s" % (name, null, (type + precision))
+
+        table = line if line[-1] != ';' else line[:-1]
+        execute(select + where, self.cursor, {'t': table.upper()}, sys.stdout)
     do_desc = do_describe
 
     def help_describe(self):
