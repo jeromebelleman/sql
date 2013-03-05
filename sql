@@ -17,7 +17,8 @@ HISTFILE = RCDIR + '/history'
 RETABLE = compile('.*FROM (?P<table>\S+).*', IGNORECASE)
 REPARAM = compile(':(?P<param>\w+)')
 SIZETIME = .2
-MAXWIDTH = 20
+MAXWIDTH = 50
+OBJECTS = 'tables', 'indices', 'indexes'
 
 # TODO Display progress?
 
@@ -86,12 +87,12 @@ def table(cursor, f, maxw):
     return rowc
 
 def execute(line, cursor, params, f):
-    sql = line if line[-1] != ';' else line[:-1]
     try:
-        t = time()
+        sql = line.rstrip(';')
 
         # Query and display results
         ps = dict((p, params[p]) for p in params if p in REPARAM.findall(sql))
+        t = time()
         cursor.execute(sql, ps)
         if f == sys.stdout:
             rowc = table(cursor, f, MAXWIDTH)
@@ -170,8 +171,8 @@ class Cli(cmd.Cmd):
         select = "SELECT " + ', '.join(cols) + " FROM user_tab_cols"
         where = " WHERE table_name = :t"
 
-        table = line if line[-1] != ';' else line[:-1]
-        execute(select + where, self.cursor, {'t': table.upper()}, sys.stdout)
+        table = line.rstrip(';').upper()
+        execute(select + where, self.cursor, {'t': table}, sys.stdout)
     do_desc = do_describe
 
     def help_describe(self):
@@ -195,10 +196,10 @@ Assign value to parameter. E.g.:
         pass
 
     def completedefault(self, text, line, begidx, endidx):
-        m = RETABLE.match(line)
+        m = RETABLE.match(line.rstrip(';'))
         if m: # Only consider columns of specified table
-            return [c.lower() for c in self.tables[m.group('table').lower()]
-                    if c[:len(text)] == text.lower()]
+            return [c for c in self.tables[m.group('table').lower()]
+                    if c.startswith(text.lower())]
         else: # Consider all columns of all tables 
             # FIXME List comprehension?
             columns = set()
@@ -206,9 +207,29 @@ Assign value to parameter. E.g.:
                 for c in self.tables[t]:
                     columns.add(c)
 
-            return [c.lower() for c in columns if c[:len(text)] == text.lower()]
+            return [c.lower() for c in columns if c.startswith(text.lower())]
 
-    def do_EOF(self, arg):
+    def do_show(self, line):
+        obj = line.rstrip(';').lower()
+        if obj == 'tables':
+            sql = "SELECT table_name, tablespace_name FROM user_tables"
+        elif obj in ('indices', 'indexes'):
+            cols = 'index_name', 'tablespace_name', 'table_name'
+            sql = "SELECT " + ', '.join(cols) + " FROM user_indexes"
+        else:
+            article = 'an' if obj[0] in 'aeiou' else 'a'
+            print "Dunno what %s %s is" % (article, obj)
+            return
+
+        execute(sql, self.cursor, {}, sys.stdout)
+
+    def complete_show(self, text, line, begidx, endidx):
+        return [t for t in OBJECTS if t.startswith(text.lower())]
+
+    def help_show(self):
+        print "Show objects: tables, indices"
+
+    def do_EOF(self, _):
         print
         readline.write_history_file(os.path.expanduser(HISTFILE))
         sys.exit(0)
