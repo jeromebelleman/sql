@@ -88,7 +88,7 @@ class Cli(cmd.Cmd):
             self.connection = cx_Oracle.connect(username, password, tns)
             self.cursor = self.connection.cursor()
         except cx_Oracle.DatabaseError, e:
-            print >>sys.stderr, e,
+            print e,
             sys.exit(1)
 
         # Gather table information
@@ -132,15 +132,16 @@ class Cli(cmd.Cmd):
         except BaseException, e:
             print e
 
+    def emptyline(self):
+        pass
+
     def default(self, line):
         sql = line if line[-1] != ';' else line[:-1]
         try:
             t = time()
 
-            # TODO Interrupt queries. Threads?
-
             # Query and display results
-            params =REPARAM.findall(sql)
+            params = REPARAM.findall(sql)
             self.cursor.execute(sql, dict((p, self.params[p])
                                           for p in self.params if p in params))
             rowc = table(self.cursor)
@@ -153,7 +154,7 @@ class Cli(cmd.Cmd):
             print
 
         except cx_Oracle.DatabaseError, e:
-            print >>sys.stderr, e,
+            print e,
 
     def completedefault(self, text, line, begidx, endidx):
         m = RETABLE.match(line)
