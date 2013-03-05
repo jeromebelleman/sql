@@ -8,13 +8,13 @@ import cx_Oracle
 from time import time
 from subprocess import Popen, PIPE
 from re import compile, IGNORECASE
-from itertools import izip
 
 RCDIR = '~/.sql'
 HISTFILE = RCDIR + '/history'
 # FIXME Doesn't handle joins yet
 RE = compile('.*FROM (?P<table>\S+).*', IGNORECASE)
-SIZETIME = 1
+SIZETIME = .2
+MAXWIDTH = 20
 
 def duration(d):
     d = int(d)
@@ -31,12 +31,8 @@ def termw():
 
 def table(cursor):
 
-    # Headings
-    for name, _, _, _, _, _, _ in cursor.description:
-        print name + ' ',
-    print
-
     # Gather data for a bit and guess likely columns widths
+    sample = []
     lens = [0] * len(cursor.description)
     t = time()
     for row in cursor:
@@ -44,7 +40,24 @@ def table(cursor):
             break
         for i, col in enumerate(row):
             lens[i] = len(str(col)) if len(str(col)) > lens[i] else lens[i]
-    print lens
+        sample.append(row)
+
+    # The header names lengths have precedence of the data length
+    lens = [l if l > len(h) else len(h) \
+            for l, (h, _, _, _, _, _, _) in zip(lens, cursor.description)]
+    
+    # Lay out format
+    fmt = ' '.join(('{:%d}' % (l if l < MAXWIDTH else MAXWIDTH) for l in lens))
+
+    # Headings
+    print fmt.format(*[name for name, _, _, _, _, _, _ in cursor.description])
+    print ' '.join('-' * (l if l < MAXWIDTH else MAXWIDTH) for l in lens)
+
+    # Display data
+    for row in sample:
+        print fmt.format(*[str(r)[:MAXWIDTH] for r in row])
+
+    print '\a'
 
 class Cli(cmd.Cmd):
     def __init__(self, username, password, tns):
