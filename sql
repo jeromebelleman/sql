@@ -6,9 +6,10 @@ import readline
 from getpass import getpass
 import cx_Oracle
 from time import time
-from subprocess import Popen, PIPE
+from subprocess import Popen, PIPE, call
 from re import compile, IGNORECASE
 from datetime import datetime, date, timedelta
+from tempfile import NamedTemporaryFile
 
 RCDIR = '~/.sql'
 HISTFILE = RCDIR + '/history'
@@ -31,7 +32,7 @@ def termw():
     _, w = out.split()
     return int(w)
 
-def table(cursor):
+def table(cursor, f, maxw):
 
     # Gather data for a bit and guess likely columns widths
     sample = []
@@ -49,28 +50,67 @@ def table(cursor):
             for l, (h, _, _, _, _, _, _) in zip(lens, cursor.description)]
     
     # Lay out format
-    fmt = ' '.join(('{:%d}' % (l if l < MAXWIDTH else MAXWIDTH) for l in lens))
+    if maxw:
+        fmt = ' '.join(('{:%d}' % (l if l < maxw else maxw) for l in lens))
+    else:
+        fmt = ' '.join(('{:%d}' % l for l in lens))
 
-    # Headers
-    print fmt.format(*[name for name, _, _, _, _, _, _ in cursor.description])
-    print ' '.join('-' * (l if l < MAXWIDTH else MAXWIDTH) for l in lens)
+    # Header and footer
+    fields = fmt.format(*[n for n, _, _, _, _, _, _ in cursor.description])
+    if maxw:
+        lines = ' '.join('-' * (l if l < maxw else maxw) for l in lens)
+    else:
+        lines = ' '.join('-' * l for l in lens)
+    print >>f, fields
+    print >>f, lines
 
     # Display data
     rowc = 0
-    for row in sample:
-        print fmt.format(*[str(r)[:MAXWIDTH] for r in row])
-        rowc += 1
-    for row in cursor:
-        print fmt.format(*[str(r)[:MAXWIDTH] for r in row])
-        rowc += 1
+    for result in sample, cursor:
+        for row in result:
+            # FIXME MAXWIDTH isn't the limit here, it's should be more dynamic
+            if maxw:
+                print >>f, fmt.format(*[str(r)[:MAXWIDTH] for r in row])
+            else:
+                print >>f, fmt.format(*[str(r) for r in row])
+            rowc += 1
 
     # Footers
-    print ' '.join('-' * (l if l < MAXWIDTH else MAXWIDTH) for l in lens)
-    print fmt.format(*[name for name, _, _, _, _, _, _ in cursor.description])
+    print >>f, lines
+    print >>f, fields
 
-    print '\a'
+    print '\a\r',
 
     return rowc
+
+def execute(line, cursor, params, f):
+    sql = line if line[-1] != ';' else line[:-1]
+    try:
+        t = time()
+
+        # Query and display results
+        ps = dict((p, params[p]) for p in params if p in REPARAM.findall(sql))
+        cursor.execute(sql, ps)
+        if f == sys.stdout:
+            rowc = table(cursor, f, MAXWIDTH)
+        else:
+            rowc = table(cursor, f, None)
+
+        # Time query and retrieval
+        print >>f, "%d row%s" % (rowc, 's' if rowc > 1 else ''),
+        d = duration(time() - t)
+        if d:
+            print >>f, "in %s" % d,
+        print >>f
+
+        # Display in pager if not stdout
+        if f != sys.stdout:
+            f.flush()
+            call(['vim', f.name])
+            f.close()
+
+    except cx_Oracle.DatabaseError, e:
+        print e,
 
 class Cli(cmd.Cmd):
     def __init__(self, username, password, tns):
@@ -100,13 +140,18 @@ class Cli(cmd.Cmd):
             else:
                 self.tables[table.lower()] = [column.lower()]
 
-    def do_edit(self, line):
-        # TODO
-        pass
+    # # TODO
+    # def do_edit(self, line):
+    #     pass
 
     def do_page(self, line):
-        # TODO
-        pass
+        # FIXME Should be in user directory in /tmp
+        f = NamedTemporaryFile(suffix='-sql')
+        # XXX Check snowplough if problem with Unicode
+        execute(line, self.cursor, self.params, f)
+
+    def default(self, line):
+        execute(line, self.cursor, self.params, sys.stdout)
 
     def do_params(self, _):
         print self.params
@@ -134,27 +179,6 @@ class Cli(cmd.Cmd):
 
     def emptyline(self):
         pass
-
-    def default(self, line):
-        sql = line if line[-1] != ';' else line[:-1]
-        try:
-            t = time()
-
-            # Query and display results
-            params = REPARAM.findall(sql)
-            self.cursor.execute(sql, dict((p, self.params[p])
-                                          for p in self.params if p in params))
-            rowc = table(self.cursor)
-
-            # Time query and retrieval
-            print "%d row%s" % (rowc, 's' if rowc > 1 else ''),
-            d = duration(time() - t)
-            if d:
-                print "in %s" % d,
-            print
-
-        except cx_Oracle.DatabaseError, e:
-            print e,
 
     def completedefault(self, text, line, begidx, endidx):
         m = RETABLE.match(line)
