@@ -5,7 +5,7 @@ import cmd
 import readline
 from getpass import getpass
 import cx_Oracle
-from time import time
+from time import time, sleep
 from subprocess import Popen, PIPE, call
 from re import compile, IGNORECASE
 from datetime import datetime, date, timedelta
@@ -18,7 +18,11 @@ RETABLE = compile('.*FROM (?P<table>\S+).*', IGNORECASE)
 REPARAM = compile(':(?P<param>\w+)')
 SIZETIME = .2
 MAXWIDTH = 50
-OBJECTS = 'tables', 'indices', 'indexes'
+OBJECTS = 'tables', 'indices' # Don't encourage indexes
+
+VIMCMDS = [
+           '+set nowrap',
+          ]
 
 # TODO Display progress?
 
@@ -83,6 +87,7 @@ def table(cursor, f, maxw):
     print >>f, fields
 
     print '\a\r',
+    sys.stdout.flush()
 
     return rowc
 
@@ -109,11 +114,11 @@ def execute(line, cursor, params, f):
         # Display in pager if not stdout
         if f != sys.stdout:
             f.flush()
-            call(['vim', f.name])
+            call(['vim'] + VIMCMDS + [f.name])
             f.close()
 
     except cx_Oracle.DatabaseError, e:
-        print e,
+        print str(e)[:-1]
 
 class Cli(cmd.Cmd):
     def __init__(self, username, password, tns):
@@ -131,7 +136,7 @@ class Cli(cmd.Cmd):
             self.connection = cx_Oracle.connect(username, password, tns)
             self.cursor = self.connection.cursor()
         except cx_Oracle.DatabaseError, e:
-            print e,
+            print str(e)[:-1]
             sys.exit(1)
 
         # Gather table information
@@ -227,7 +232,7 @@ Assign value to parameter. E.g.:
         return [t for t in OBJECTS if t.startswith(text.lower())]
 
     def help_show(self):
-        print "Show objects: tables, indices"
+        print "Show objects: %s" % ', '.join(OBJECTS)
 
     def do_EOF(self, _):
         print
