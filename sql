@@ -54,10 +54,17 @@ def table(cursor):
     print ' '.join('-' * (l if l < MAXWIDTH else MAXWIDTH) for l in lens)
 
     # Display data
+    rowc = 0
     for row in sample:
         print fmt.format(*[str(r)[:MAXWIDTH] for r in row])
+        rowc += 1
+    for row in cursor:
+        print fmt.format(*[str(r)[:MAXWIDTH] for r in row])
+        rowc += 1
 
     print '\a'
+
+    return rowc
 
 class Cli(cmd.Cmd):
     def __init__(self, username, password, tns):
@@ -111,14 +118,18 @@ class Cli(cmd.Cmd):
         try:
             t = time()
 
+            # TODO Interrupt queries. Threads?
+
             # Query and display results
             self.cursor.execute(sql)
-            table(self.cursor)
+            rowc = table(self.cursor)
 
             # Time query and retrieval
+            print "%d rows" % rowc,
             d = duration(time() - t)
             if d:
-                print d
+                print " in %s" % d,
+            print
 
         except cx_Oracle.DatabaseError, e:
             print >>sys.stderr, e,
