@@ -8,6 +8,7 @@ import cx_Oracle
 from time import time
 from subprocess import Popen, PIPE
 from re import compile, IGNORECASE
+from datetime import datetime, date, timedelta
 
 RCDIR = '~/.sql'
 HISTFILE = RCDIR + '/history'
@@ -70,6 +71,8 @@ class Cli(cmd.Cmd):
     def __init__(self, username, password, tns):
         cmd.Cmd.__init__(self)
 
+        self.params = {}
+
         # Load history file
         if os.path.isfile(os.path.expanduser(HISTFILE)):
             readline.read_history_file(os.path.expanduser(HISTFILE))
@@ -101,6 +104,7 @@ class Cli(cmd.Cmd):
         pass
 
     def do_describe(self, line):
+        # TODO Use table()?
         cols = "column_name", "nullable", "data_type", "data_precision"
         select = "SELECT " + ', '.join(cols) + " FROM user_tab_cols"
         where = " WHERE table_name = :t"
@@ -113,6 +117,10 @@ class Cli(cmd.Cmd):
             print "%13s %13s %13s" % (name, null, (type + precision))
     do_desc = do_describe
 
+    def do_param(self, line):
+        key, val = line.split('=')
+        self.params[key.strip()] = eval(val)
+
     def default(self, line):
         sql = line if line[-1] != ';' else line[:-1]
         try:
@@ -121,14 +129,14 @@ class Cli(cmd.Cmd):
             # TODO Interrupt queries. Threads?
 
             # Query and display results
-            self.cursor.execute(sql)
+            self.cursor.execute(sql, self.params)
             rowc = table(self.cursor)
 
             # Time query and retrieval
-            print "%d rows" % rowc,
+            print "%d row%s" % (rowc, 's' if rowc > 1 else ''),
             d = duration(time() - t)
             if d:
-                print " in %s" % d,
+                print "in %s" % d,
             print
 
         except cx_Oracle.DatabaseError, e:
