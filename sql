@@ -19,6 +19,8 @@ REPARAM = compile(':(?P<param>\w+)')
 SIZETIME = .2
 MAXWIDTH = 20
 
+# TODO Display progress?
+
 def duration(d):
     d = int(d)
     seconds = "%02d s" %  (d % 60) if d % 60 != 0 else ''
@@ -150,11 +152,17 @@ class Cli(cmd.Cmd):
         # XXX Check snowplough if problem with Unicode
         execute(line, self.cursor, self.params, f)
 
+    def help_page(self):
+        print "Display results in Vim instead of stdout"
+
     def default(self, line):
         execute(line, self.cursor, self.params, sys.stdout)
 
     def do_params(self, _):
         print self.params
+
+    def help_params(self):
+        print "Display set parameters and their value"
 
     def do_describe(self, line):
         # TODO Use table()?
@@ -170,12 +178,22 @@ class Cli(cmd.Cmd):
             print "%13s %13s %13s" % (name, null, (type + precision))
     do_desc = do_describe
 
+    def help_describe(self):
+        print "Describe table"
+    help_desc = help_describe
+
     def do_param(self, line):
         try:
             key, val = line.split('=')
             self.params[key.strip()] = eval(val)
         except BaseException, e:
             print e
+
+    def help_param(self):
+        print '''\
+Assign value to parameter. E.g.:
+% param t = date(1984,4,6)
+% SELECT * FROM loc where eventTime = :t'''
 
     def emptyline(self):
         pass
@@ -198,6 +216,12 @@ class Cli(cmd.Cmd):
         print
         readline.write_history_file(os.path.expanduser(HISTFILE))
         sys.exit(0)
+
+    def help_EOF(self):
+        print "Exit. You could also use Ctrl-D."
+
+    def help_help(self):
+        do_help()
 
 def main():
     p = argparse.ArgumentParser()
