@@ -108,6 +108,9 @@ class Cli(cmd.Cmd):
         # TODO
         pass
 
+    def do_params(self, _):
+        print self.params
+
     def do_describe(self, line):
         # TODO Use table()?
         cols = "column_name", "nullable", "data_type", "data_precision"
@@ -123,8 +126,11 @@ class Cli(cmd.Cmd):
     do_desc = do_describe
 
     def do_param(self, line):
-        key, val = line.split('=')
-        self.params[key.strip()] = eval(val)
+        try:
+            key, val = line.split('=')
+            self.params[key.strip()] = eval(val)
+        except BaseException, e:
+            print e
 
     def default(self, line):
         sql = line if line[-1] != ';' else line[:-1]
