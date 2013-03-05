@@ -3,16 +3,18 @@ import argparse
 import sys, os, os.path
 import cmd
 import readline
-import getpass
+from getpass import getpass
 import cx_Oracle
-import time
-import subprocess
-import re
+from time import time
+from subprocess import Popen, PIPE
+from re import compile, IGNORECASE
+from itertools import izip
 
 RCDIR = '~/.sql'
 HISTFILE = RCDIR + '/history'
 # FIXME Doesn't handle joins yet
-RE = re.compile('.*FROM (?P<table>\S+).*', re.IGNORECASE)
+RE = compile('.*FROM (?P<table>\S+).*', IGNORECASE)
+SIZETIME = 1
 
 def duration(d):
     d = int(d)
@@ -23,10 +25,26 @@ def duration(d):
     return (hours + minutes + seconds).strip()
 
 def termw():
-    out, _ = subprocess.Popen(['stty', 'size'],
-                              stdout=subprocess.PIPE).communicate()
+    out, _ = Popen(['stty', 'size'], stdout=PIPE).communicate()
     _, w = out.split()
     return int(w)
+
+def table(cursor):
+
+    # Headings
+    for name, _, _, _, _, _, _ in cursor.description:
+        print name + ' ',
+    print
+
+    # Gather data for a bit and guess likely columns widths
+    lens = [0] * len(cursor.description)
+    t = time()
+    for row in cursor:
+        if time() - t > SIZETIME:
+            break
+        for i, col in enumerate(row):
+            lens[i] = len(str(col)) if len(str(col)) > lens[i] else lens[i]
+    print lens
 
 class Cli(cmd.Cmd):
     def __init__(self, username, password, tns):
@@ -78,13 +96,17 @@ class Cli(cmd.Cmd):
     def default(self, line):
         sql = line if line[-1] != ';' else line[:-1]
         try:
-            t = time.time()
+            t = time()
+
+            # Query and display results
             self.cursor.execute(sql)
-            for row in self.cursor:
-                print row
-            d = duration(time.time() - t)
+            table(self.cursor)
+
+            # Time query and retrieval
+            d = duration(time() - t)
             if d:
                 print d
+
         except cx_Oracle.DatabaseError, e:
             print >>sys.stderr, e,
 
@@ -121,7 +143,7 @@ def main():
             username = args.user
         else:
             username = raw_input('Username: ')
-        password = getpass.getpass()
+        password = getpass()
     except (EOFError, KeyboardInterrupt):
         print
         sys.exit(0)
