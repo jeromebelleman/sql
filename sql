@@ -113,14 +113,17 @@ def execute(line, cursor, params, f):
             rowc = table(cursor, f, None)
 
         # Time query and retrieval
-        if f != sys.stdout:
-            for filehandle in (f, sys.stdout):
-                print >>filehandle, \
-                    "%d row%s" % (rowc, 's' if rowc > 1 else ''),
-                d = duration(time() - t)
-                if d:
-                    print >>filehandle, "in %s" % d,
-                print >>filehandle
+        if f == sys.stdout:
+            filehandles = [f]
+        else:
+            filehandles = [f, sys.stdout]
+
+        for fh in filehandles:
+            print >>fh, "%d row%s" % (rowc, 's' if rowc > 1 else ''),
+            d = duration(time() - t)
+            if d:
+                print >>fh, "in %s" % d,
+            print >>fh
 
         # Display in pager if not stdout
         if f != sys.stdout:
