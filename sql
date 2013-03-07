@@ -13,6 +13,7 @@ from tempfile import NamedTemporaryFile
 
 RCDIR = '~/.sql'
 HISTFILE = RCDIR + '/history'
+TMPDIR = RCDIR + '/tmp'
 # FIXME Doesn't handle joins yet
 RETABLE = compile('.*FROM (?P<table>\S+).*', IGNORECASE)
 REPARAM = compile(':(?P<param>\w+)')
@@ -25,6 +26,7 @@ VIMCMDS = [
           ]
 
 # TODO Display progress?
+# TODO Change window title
 
 def duration(d):
     d = int(d)
@@ -167,8 +169,9 @@ class Cli(cmd.Cmd):
     #     pass
 
     def do_page(self, line):
-        # FIXME Should be in user directory in /tmp
-        f = NamedTemporaryFile(suffix='-sql')
+        if not os.path.isdir(os.path.expanduser(TMPDIR)):
+            os.mkdir(os.path.expanduser(TMPDIR))
+        f = NamedTemporaryFile(suffix='-sql', dir=os.path.expanduser(TMPDIR))
         # XXX Check snowplough if problem with Unicode
         execute(line, self.cursor, self.params, f)
 
