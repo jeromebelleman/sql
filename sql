@@ -58,9 +58,10 @@ def table(cursor, f, maxw):
     
     # Lay out format
     if maxw:
-        fmt = ' '.join(('{:%d}' % (l if l < maxw else maxw) for l in lens))
+        fmt = ' '.join(('{%d:%d}' % (i, (l if l < maxw else maxw)) \
+            for i, l in enumerate(lens)))
     else:
-        fmt = ' '.join(('{:%d}' % l for l in lens))
+        fmt = ' '.join(('{%d:%d}' % (i, l) for i, l in enumerate(lens)))
 
     # Header and footer
     fields = fmt.format(*[n for n, _, _, _, _, _, _ in cursor.description])
