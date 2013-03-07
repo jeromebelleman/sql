@@ -21,11 +21,10 @@ SIZETIME = .2
 MAXWIDTH = 50
 OBJECTS = 'tables', 'indices' # Don't encourage indexes
 
-VIMCMDS = [
-           '+set nowrap',
-          ]
+VIMCMDS = '+set %s titlestring=%s\\ -\\ sql"'
 
 # TODO Display progress?
+# TODO Write history file after each command
 
 def duration(d):
     d = int(d)
@@ -93,6 +92,11 @@ def table(cursor, f, maxw):
 
     return rowc
 
+def vim(f, title, wrap):
+    f.flush()
+    call(['vim', VIMCMDS % (wrap, title), f.name])
+    wintitle(title)
+
 def execute(line, cursor, params, f, title):
     try:
         # Query and parameters
@@ -127,12 +131,8 @@ def execute(line, cursor, params, f, title):
 
         # Display in pager if not stdout
         if f != sys.stdout:
-            f.flush()
-            call(['vim',
-                  '+set nowrap titlestring=%s\\ -\\ sql"' % title,
-                  f.name])
+            vim(f, title, 'wrap')
             f.close()
-            wintitle(title)
 
     except cx_Oracle.DatabaseError, e:
         print str(e)[:-1]
@@ -172,14 +172,23 @@ class Cli(cmd.Cmd):
             else:
                 self.tables[table.lower()] = [column.lower()]
 
-    # # TODO
-    # def do_edit(self, line):
+    def do_edit(self, line):
+        f = NamedTemporaryFile(dir=os.path.expanduser(TMPDIR))
+        print >>f, line
+        vim(f, self.title, 'nowrap')
+        g = open(f.name)
+        line = g.read()
+        readline.add_history(line)
+        execute(line, self.cursor, self.params, sys.stdout, self.title)
+        g.close()
+        f.close()
+
+    # TODO
+    # def do_vim(self, line):
     #     pass
 
     def do_page(self, line):
-        if not os.path.isdir(os.path.expanduser(TMPDIR)):
-            os.mkdir(os.path.expanduser(TMPDIR))
-        f = NamedTemporaryFile(suffix='-sql', dir=os.path.expanduser(TMPDIR))
+        f = NamedTemporaryFile(dir=os.path.expanduser(TMPDIR))
         # XXX Check snowplough if problem with Unicode
         execute(line, self.cursor, self.params, f, self.title)
 
@@ -282,6 +291,8 @@ def main():
 
     if not os.path.isdir(os.path.expanduser(RCDIR)):
         os.mkdir(os.path.expanduser(RCDIR))
+    if not os.path.isdir(os.path.expanduser(TMPDIR)):
+        os.mkdir(os.path.expanduser(TMPDIR))
 
     try:
         if args.user:
