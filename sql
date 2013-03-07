@@ -14,8 +14,6 @@ from tempfile import NamedTemporaryFile
 RCDIR = '~/.sql'
 HISTFILE = RCDIR + '/history'
 TMPDIR = RCDIR + '/tmp'
-# FIXME Doesn't handle joins yet
-RETABLE = compile('.*FROM (?P<table>\S+).*', IGNORECASE)
 REPARAM = compile(':(?P<param>\w+)')
 SIZETIME = .2
 MAXWIDTH = 50
@@ -24,6 +22,8 @@ OBJECTS = 'tables', 'indices' # Don't encourage indexes
 VIMCMDS = '+set %s titlestring=%s\\ -\\ sql"'
 
 # TODO Display progress?
+# TODO Plans
+# TODO Disk space
 
 def duration(d):
     d = int(d)
@@ -238,18 +238,26 @@ Assign value to parameter. E.g.:
         pass
 
     def completedefault(self, text, line, begidx, endidx):
-        m = RETABLE.match(line.rstrip(';'))
-        if m: # Only consider columns of specified table
-            return [c for c in self.tables[m.group('table').lower()]
-                    if c.startswith(text.lower())]
-        else: # Consider all columns of all tables 
-            # FIXME List comprehension?
-            columns = set()
-            for t in self.tables:
-                for c in self.tables[t]:
-                    columns.add(c)
+        '''
+        Always return all tables, only return columns whose table is already
+        in the line, unless the FROM clause isn't in the line yet in which
+        case return all columns
+        '''
+        columns = set()
+        lowerline = line.lower()
 
-            return [c.lower() for c in columns if c.startswith(text.lower())]
+        if 'from' in lowerline:
+            # Add columns whose table is already in the line
+            for t in self.tables:
+                if t in lowerline:
+                    columns |= set(self.tables[t])
+        else:
+            # Add all columns
+            for t in self.tables:
+                columns |= set(self.tables[t])
+
+        return [t for t in self.tables if t.startswith(text.lower())] + \
+               [c.lower() for c in columns if c.startswith(text.lower())]
 
     def do_show(self, line):
         obj = line.rstrip(';').lower()
