@@ -75,9 +75,8 @@ def table(cursor, f, maxw):
     rowc = 0
     for result in sample, cursor:
         for row in result:
-            # FIXME MAXWIDTH isn't the limit here, it's should be more dynamic
             if maxw:
-                print >>f, fmt.format(*[str(r)[:MAXWIDTH] for r in row])
+                print >>f, fmt.format(*[str(r)[:maxw] for r in row])
             else:
                 print >>f, fmt.format(*[str(r) for r in row])
             rowc += 1
