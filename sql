@@ -91,7 +91,6 @@ def table(cursor, f, maxw):
     print '\a\r',
     sys.stdout.flush()
 
-    # FIXME Suspicion that rowc might be wrong, sometimes
     return rowc
 
 def execute(line, cursor, params, f, title):
