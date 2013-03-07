@@ -26,7 +26,6 @@ VIMCMDS = [
           ]
 
 # TODO Display progress?
-# TODO Change window title
 
 def duration(d):
     d = int(d)
@@ -95,7 +94,7 @@ def table(cursor, f, maxw):
     # FIXME Suspicion that rowc might be wrong, sometimes
     return rowc
 
-def execute(line, cursor, params, f):
+def execute(line, cursor, params, f, title):
     try:
         # Query and parameters
         sql = line.rstrip(';')
@@ -130,11 +129,17 @@ def execute(line, cursor, params, f):
         # Display in pager if not stdout
         if f != sys.stdout:
             f.flush()
-            call(['vim'] + VIMCMDS + [f.name])
+            call(['vim',
+                  '+set nowrap titlestring=%s\\ -\\ sql"' % title,
+                  f.name])
             f.close()
+            wintitle(title)
 
     except cx_Oracle.DatabaseError, e:
         print str(e)[:-1]
+
+def wintitle(title):
+    print "\033]0;%s - sql\007\r" % title,
 
 class Cli(cmd.Cmd):
     def __init__(self, username, password, tns):
@@ -142,10 +147,14 @@ class Cli(cmd.Cmd):
 
         self.params = {}
 
+        # Set prompt and window title
+        self.title = "%s@%s" % (username, tns)
+        self.prompt = self.title + '% '
+        wintitle(self.title)
+
         # Load history file
         if os.path.isfile(os.path.expanduser(HISTFILE)):
             readline.read_history_file(os.path.expanduser(HISTFILE))
-        self.prompt = '%s@%s%% ' % (username, tns)
 
         # Connect
         try:
@@ -173,13 +182,13 @@ class Cli(cmd.Cmd):
             os.mkdir(os.path.expanduser(TMPDIR))
         f = NamedTemporaryFile(suffix='-sql', dir=os.path.expanduser(TMPDIR))
         # XXX Check snowplough if problem with Unicode
-        execute(line, self.cursor, self.params, f)
+        execute(line, self.cursor, self.params, f, self.title)
 
     def help_page(self):
         print "Display results in Vim instead of stdout"
 
     def default(self, line):
-        execute(line, self.cursor, self.params, sys.stdout)
+        execute(line, self.cursor, self.params, sys.stdout, self.title)
 
     def do_params(self, _):
         print self.params
@@ -192,9 +201,10 @@ class Cli(cmd.Cmd):
                'data_length', 'data_precision', 'data_scale'
         select = "SELECT " + ', '.join(cols) + " FROM user_tab_cols"
         where = " WHERE table_name = :t"
+        sql = select + where
 
         table = line.rstrip(';').upper()
-        execute(select + where, self.cursor, {'t': table}, sys.stdout)
+        execute(sql, self.cursor, {'t': table}, sys.stdout, self.title)
     do_desc = do_describe
 
     def help_describe(self):
@@ -246,7 +256,7 @@ Assign value to parameter. E.g.:
             print "Dunno what %s %s is" % (article, obj)
             return
 
-        execute(sql, self.cursor, {}, sys.stdout)
+        execute(sql, self.cursor, {}, sys.stdout, self.title)
 
     def complete_show(self, text, line, begidx, endidx):
         return [t for t in OBJECTS if t.startswith(text.lower())]
