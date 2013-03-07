@@ -89,14 +89,21 @@ def table(cursor, f, maxw):
     print '\a\r',
     sys.stdout.flush()
 
+    # FIXME Suspicion that rowc might be wrong, sometimes
     return rowc
 
 def execute(line, cursor, params, f):
     try:
+        # Query and parameters
         sql = line.rstrip(';')
+        ps = dict((p, params[p]) for p in params if p in REPARAM.findall(sql))
+
+        # Display query and parameters in Vim
+        if f != sys.stdout:
+            print >>f, sql
+            print >>f, ps
 
         # Query and display results
-        ps = dict((p, params[p]) for p in params if p in REPARAM.findall(sql))
         t = time()
         cursor.execute(sql, ps)
         if f == sys.stdout:
@@ -105,11 +112,14 @@ def execute(line, cursor, params, f):
             rowc = table(cursor, f, None)
 
         # Time query and retrieval
-        print >>f, "%d row%s" % (rowc, 's' if rowc > 1 else ''),
-        d = duration(time() - t)
-        if d:
-            print >>f, "in %s" % d,
-        print >>f
+        if f != sys.stdout:
+            for filehandle in (f, sys.stdout):
+                print >>filehandle, \
+                    "%d row%s" % (rowc, 's' if rowc > 1 else ''),
+                d = duration(time() - t)
+                if d:
+                    print >>filehandle, "in %s" % d,
+                print >>filehandle
 
         # Display in pager if not stdout
         if f != sys.stdout:
@@ -221,6 +231,9 @@ Assign value to parameter. E.g.:
         elif obj in ('indices', 'indexes'):
             cols = 'index_name', 'tablespace_name', 'table_name'
             sql = "SELECT " + ', '.join(cols) + " FROM user_indexes"
+        elif not obj:
+            self.help_show()
+            return
         else:
             article = 'an' if obj[0] in 'aeiou' else 'a'
             print "Dunno what %s %s is" % (article, obj)
