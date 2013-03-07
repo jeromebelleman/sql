@@ -24,7 +24,6 @@ OBJECTS = 'tables', 'indices' # Don't encourage indexes
 VIMCMDS = '+set %s titlestring=%s\\ -\\ sql"'
 
 # TODO Display progress?
-# TODO Write history file after each command
 
 def duration(d):
     d = int(d)
@@ -172,6 +171,10 @@ class Cli(cmd.Cmd):
             else:
                 self.tables[table.lower()] = [column.lower()]
 
+    def precmd(self, line):
+        readline.write_history_file(os.path.expanduser(HISTFILE))
+        return line
+
     def do_edit(self, line):
         f = NamedTemporaryFile(dir=os.path.expanduser(TMPDIR))
         print >>f, line
@@ -274,7 +277,6 @@ Assign value to parameter. E.g.:
 
     def do_EOF(self, _):
         print
-        readline.write_history_file(os.path.expanduser(HISTFILE))
         sys.exit(0)
 
     def help_EOF(self):
