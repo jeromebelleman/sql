@@ -24,6 +24,7 @@ VIMCMDS = '+set %s titlestring=%s\\ -\\ sql"'
 # TODO Display progress?
 # TODO Plans
 # TODO Disk space
+# TODO Show columns with indices
 
 def duration(d):
     d = int(d)
@@ -129,7 +130,7 @@ def execute(line, cursor, params, f, title):
 
         # Display in pager if not stdout
         if f != sys.stdout:
-            vim(f, title, 'wrap')
+            vim(f, title, 'nowrap')
             f.close()
 
     except cx_Oracle.DatabaseError, e:
@@ -177,7 +178,7 @@ class Cli(cmd.Cmd):
     def do_edit(self, line):
         f = NamedTemporaryFile(dir=os.path.expanduser(TMPDIR))
         print >>f, line
-        vim(f, self.title, 'nowrap')
+        vim(f, self.title, 'wrap')
         g = open(f.name)
         line = g.read()
         readline.add_history(line)
