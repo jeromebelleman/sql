@@ -41,6 +41,10 @@ def termw():
 
 def table(cursor, f, maxw):
 
+    # Some statements have no result (e.g. EXPLAIN)
+    if not cursor.description:
+        return 0
+
     # Gather data for a bit and guess likely columns widths
     sample = []
     lens = [0] * len(cursor.description)
