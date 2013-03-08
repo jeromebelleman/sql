@@ -24,7 +24,6 @@ VIMCMDS = '+set %s titlestring=%s\\ -\\ sql"'
 # TODO Display progress?
 # TODO Plans
 # TODO Disk space
-# TODO Show columns with indices
 
 def duration(d):
     d = int(d)
@@ -269,8 +268,14 @@ Assign value to parameter. E.g.:
         if obj == 'tables':
             sql = "SELECT table_name, tablespace_name FROM user_tables"
         elif obj in ('indices', 'indexes'):
-            cols = 'index_name', 'tablespace_name', 'table_name'
-            sql = "SELECT " + ', '.join(cols) + " FROM user_indexes"
+            cols = 'user_indexes.table_name', 'index_name', 'uniqueness', \
+                   'distinct_keys', 'tablespace_name', 'column_name', \
+                   'column_position'
+            select = "SELECT " + ', '.join(cols)
+            table = " FROM user_indexes JOIN user_ind_columns"
+            using = " USING (index_name)"
+            order = " ORDER BY table_name, column_position"
+            sql = select + table + using + order
         elif not obj:
             self.help_show()
             return
