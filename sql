@@ -184,7 +184,7 @@ class Cli(cmd.Cmd):
         print >>f, line
         vim(f, self.title, 'wrap')
         g = open(f.name)
-        line = g.read()
+        line = g.read().strip() # Can't cope with any trailing newline
         readline.add_history(line)
         execute(line, self.cursor, self.params, sys.stdout, self.title)
         g.close()
