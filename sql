@@ -17,12 +17,11 @@ TMPDIR = RCDIR + '/tmp'
 REPARAM = compile(':(?P<param>\w+)')
 SIZETIME = .2
 MAXWIDTH = 50
-OBJECTS = 'tables', 'indices' # Don't encourage indexes
+OBJECTS = 'tables', 'indices' # Don't encourage 'indexes'
 
 VIMCMDS = '+set %s titlestring=%s\\ -\\ sql"'
 
 # TODO Display progress?
-# TODO Plans
 # TODO Disk space
 
 def duration(d):
@@ -189,6 +188,9 @@ class Cli(cmd.Cmd):
         g.close()
         f.close()
 
+    def help_edit(self):
+        print "Edit statement in Vim"
+
     # TODO
     # def do_vim(self, line):
     #     pass
@@ -224,6 +226,23 @@ class Cli(cmd.Cmd):
     def help_describe(self):
         print "Describe table"
     help_desc = help_describe
+
+    def do_explaine(self, line):
+        execute("EXPLAIN PLAN FOR " + line, self.cursor, {},
+                sys.stdout, self.title)
+        cols = 'operation', 'options', 'object_name', 'optimizer', 'cost', \
+               'cardinality', 'time'
+        sql = "SELECT " + ', '.join(cols) + " FROM plan_table"
+        execute(sql, self.cursor, {}, sys.stdout, self.title)
+    do_plan = do_explaine
+
+    def help_explain(self):
+        print '''\
+Display query execution plan. Note that COST doesn't have any particular unit
+and that CARDINALITY is the number of rows accessed.  TIME is the estimated
+time in seconds which will be spent.'''
+
+    help_plan = help_explain
 
     def do_param(self, line):
         try:
