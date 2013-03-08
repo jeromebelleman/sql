@@ -123,12 +123,14 @@ def execute(line, cursor, params, f, title):
         else:
             filehandles = [f, sys.stdout]
 
-        for fh in filehandles:
-            print >>fh, "%d row%s" % (rowc, 's' if rowc > 1 else ''),
-            d = duration(time() - t)
-            if d:
-                print >>fh, "in %s" % d,
-            print >>fh
+        if rowc:
+            for fh in filehandles:
+                print >>fh, "%d row%s" % (rowc, 's' if rowc > 1 else ''),
+
+                d = duration(time() - t)
+                if d:
+                    print >>fh, "in %s" % d,
+                print >>fh
 
         # Display in pager if not stdout
         if f != sys.stdout:
@@ -227,14 +229,14 @@ class Cli(cmd.Cmd):
         print "Describe table"
     help_desc = help_describe
 
-    def do_explaine(self, line):
+    def do_explain(self, line):
         execute("EXPLAIN PLAN FOR " + line, self.cursor, {},
                 sys.stdout, self.title)
         cols = 'operation', 'options', 'object_name', 'optimizer', 'cost', \
                'cardinality', 'time'
         sql = "SELECT " + ', '.join(cols) + " FROM plan_table"
         execute(sql, self.cursor, {}, sys.stdout, self.title)
-    do_plan = do_explaine
+    do_plan = do_explain
 
     def help_explain(self):
         print '''\
