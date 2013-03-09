@@ -17,12 +17,15 @@ TMPDIR = RCDIR + '/tmp'
 REPARAM = compile(':(?P<param>\w+)')
 SIZETIME = .2
 MAXWIDTH = 50
-OBJECTS = 'tables', 'indices' # Don't encourage 'indexes'
-
+OBJECTS = 'usage', 'tables', 'indices' # Don't encourage 'indexes'
+USEFUL = 'plan_table', 'all_tab_cols', 'user_objects', 'user_tables', \
+         'user_tab_cols', 'user_indexes', 'user_ind_columns', \
+         'user_segments', 'user_extents', 'user_free_space'
 VIMCMDS = '+set %s titlestring=%s\\ -\\ sql"'
 
 # TODO Display progress?
 # TODO Disk space
+# TODO Page based on a all rows (since we only display at the end)
 
 def duration(d):
     d = int(d)
@@ -217,7 +220,7 @@ class Cli(cmd.Cmd):
     def do_describe(self, line):
         cols = 'column_name', 'nullable', 'data_type', \
                'data_length', 'data_precision', 'data_scale'
-        select = "SELECT " + ', '.join(cols) + " FROM user_tab_cols"
+        select = "SELECT " + ', '.join(cols) + " FROM all_tab_cols"
         where = " WHERE table_name = :t"
         sql = select + where
 
@@ -229,22 +232,19 @@ class Cli(cmd.Cmd):
         print "Describe table"
     help_desc = help_describe
 
-    def do_explain(self, line):
+    def do_plan(self, line):
         execute("EXPLAIN PLAN FOR " + line, self.cursor, {},
                 sys.stdout, self.title)
         cols = 'operation', 'options', 'object_name', 'optimizer', 'cost', \
                'cardinality', 'time'
         sql = "SELECT " + ', '.join(cols) + " FROM plan_table"
         execute(sql, self.cursor, {}, sys.stdout, self.title)
-    do_plan = do_explain
 
-    def help_explain(self):
+    def help_plan(self):
         print '''\
 Display query execution plan. Note that COST doesn't have any particular unit
 and that CARDINALITY is the number of rows accessed.  TIME is the estimated
 time in seconds which will be spent.'''
-
-    help_plan = help_explain
 
     def do_param(self, line):
         try:
@@ -297,6 +297,13 @@ Assign value to parameter. E.g.:
             using = " USING (index_name)"
             order = " ORDER BY table_name, column_position"
             sql = select + table + using + order
+        elif obj == 'usage':
+            cols = 'segment_name', \
+                   'TO_CHAR(SUM(bytes) / 1073741824, 9999.9) "USAGE (GB)"'
+            select = "SELECT " + ', '.join(cols)
+            table = " FROM user_segments"
+            group = ' GROUP BY segment_name ORDER BY "USAGE (GB)"'
+            sql = select + table + group
         elif not obj:
             self.help_show()
             return
