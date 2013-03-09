@@ -24,8 +24,7 @@ USEFUL = 'plan_table', 'all_tab_cols', 'user_objects', 'user_tables', \
 VIMCMDS = '+set %s titlestring=%s\\ -\\ sql"'
 
 # TODO Display progress?
-# TODO Disk space
-# TODO Page based on a all rows (since we only display at the end)
+# TODO Page based on all rows (since we only display at the end)
 
 def duration(d):
     d = int(d)
@@ -177,6 +176,10 @@ class Cli(cmd.Cmd):
                 self.tables[table.lower()].append(column.lower())
             else:
                 self.tables[table.lower()] = [column.lower()]
+
+        # Add useful tables to e.g. completion (let's not do columns, though)
+        for t in USEFUL:
+            self.tables[t] = {}
 
     def precmd(self, line):
         readline.write_history_file(os.path.expanduser(HISTFILE))
