@@ -142,10 +142,14 @@ def execute(line, cursor, params, f, title):
             f.close()
 
     except cx_Oracle.DatabaseError, e:
+        print ' ' * (len(prompt(title)) + e.args[0].offset) + '*'
         print str(e)[:-1]
 
 def wintitle(title):
     print "\033]0;%s - sql\007\r" % title,
+
+def prompt(title):
+    return title + '% '
 
 class Cli(cmd.Cmd):
     def __init__(self, username, password, tns):
@@ -155,7 +159,7 @@ class Cli(cmd.Cmd):
 
         # Set prompt and window title
         self.title = "%s@%s" % (username, tns)
-        self.prompt = self.title + '% '
+        self.prompt = prompt(self.title)
         wintitle(self.title)
 
         # Load history file
