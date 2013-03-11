@@ -17,10 +17,12 @@ TMPDIR = RCDIR + '/tmp'
 REPARAM = compile(':(?P<param>\w+)')
 SIZETIME = .2
 MAXWIDTH = 50
-OBJECTS = 'usage', 'tables', 'indices' # Don't encourage 'indexes'
-USEFUL = 'plan_table', 'all_tab_cols', 'user_objects', 'user_tables', \
-         'user_tab_cols', 'user_indexes', 'user_ind_columns', \
-         'user_segments', 'user_extents', 'user_free_space'
+OBJECTS = 'usage', 'systables', 'tables', 'indices' # Don't encourage 'indexes'
+USEFUL = 'all_objects',  'all_tables',       'all_tab_cols', \
+         'all_indexes',  'all_ind_columns', \
+         'user_objects', 'user_tables',      'user_tab_cols', \
+         'user_indexes', 'user_ind_columns', \
+         'user_segments', 'user_extents', 'user_free_space', 'plan_table'
 VIMCMDS = '+set %s titlestring=%s\\ -\\ sql"'
 
 # TODO Display progress?
@@ -228,6 +230,8 @@ class Cli(cmd.Cmd):
         sql = select + where
 
         table = line.rstrip(';').upper()
+        if table == 'PLAN_TABLE':
+            table = table + '$'
         execute(sql, self.cursor, {'t': table}, sys.stdout, self.title)
     do_desc = do_describe
 
@@ -240,7 +244,9 @@ class Cli(cmd.Cmd):
                 sys.stdout, self.title)
         cols = 'operation', 'options', 'object_name', 'optimizer', 'cost', \
                'cardinality', 'time'
-        sql = "SELECT " + ', '.join(cols) + " FROM plan_table"
+        select = "SELECT " + ', '.join(cols) + " FROM plan_table"
+        where = " WHERE plan_id = (SELECT MAX(plan_id) FROM plan_table)"
+        sql = select + where
         execute(sql, self.cursor, {}, sys.stdout, self.title)
 
     def help_plan(self):
@@ -290,23 +296,34 @@ Assign value to parameter. E.g.:
     def do_show(self, line):
         obj = line.rstrip(';').lower()
         if obj == 'tables':
+            # TODO Use in-memory dictionary 
             sql = "SELECT table_name, tablespace_name FROM user_tables"
+        elif obj == 'systables':
+            # Not using it here anymore but note that all_tab_cols has more
+            # than all_tables, for some reason
+            class FakeCursor:
+                description = ('TABLE_NAME', None, None, None, None, None, None),
+                useful = ((t.upper(),) for t in USEFUL)
+                def __iter__(self):
+                    return FakeCursor.useful
+            table(FakeCursor(), sys.stdout, MAXWIDTH)
+            return
         elif obj in ('indices', 'indexes'):
             cols = 'user_indexes.table_name', 'index_name', 'uniqueness', \
                    'distinct_keys', 'tablespace_name', 'column_name', \
                    'column_position'
             select = "SELECT " + ', '.join(cols)
-            table = " FROM user_indexes JOIN user_ind_columns"
+            tab = " FROM user_indexes JOIN user_ind_columns"
             using = " USING (index_name)"
             order = " ORDER BY table_name, column_position"
-            sql = select + table + using + order
+            sql = select + tab + using + order
         elif obj == 'usage':
             cols = 'segment_name', \
                    'TO_CHAR(SUM(bytes) / 1073741824, 9999.9) "USAGE (GB)"'
             select = "SELECT " + ', '.join(cols)
-            table = " FROM user_segments"
+            tab = " FROM user_segments"
             group = ' GROUP BY segment_name ORDER BY "USAGE (GB)"'
-            sql = select + table + group
+            sql = select + tab + group
         elif not obj:
             self.help_show()
             return
