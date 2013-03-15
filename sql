@@ -27,11 +27,12 @@ USEFUL = 'all_objects',  'all_tables',       'all_tab_cols', \
 VIMCMDS = '+set %s titlestring=%s\\ -\\ sql"'
 
 # TODO Display progress?
-# TODO Page based on all rows (since we only display at the end)
 # TODO Redisplay to handle window resizes
 # TODO Page anything
 # TODO Update completion when new tables
 # TODO Calibrate column width on number of rows in addition to time
+# TODO Use quota table to display usage
+# TODO Add quota tables to systables
 
 def duration(d):
     d = int(d)
@@ -57,7 +58,9 @@ def table(cursor, f, maxw):
     lens = [0] * len(cursor.description)
     t = time()
     for row in cursor:
-        if time() - t > SIZETIME:
+        # Don't ever break if the outfile isn't stdout: means we're paging and
+        # we'll use all the data to define column widths
+        if f == sys.stdout and time() - t > SIZETIME:
             break
         for i, col in enumerate(row):
             lens[i] = len(str(col)) if len(str(col)) > lens[i] else lens[i]
