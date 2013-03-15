@@ -7,7 +7,7 @@ from getpass import getpass
 import cx_Oracle
 from time import time, sleep
 from subprocess import Popen, PIPE, call
-from re import compile, IGNORECASE
+from re import compile, IGNORECASE, DOTALL
 from datetime import datetime, date, timedelta
 from tempfile import NamedTemporaryFile
 
@@ -15,6 +15,7 @@ RCDIR = '~/.sql'
 HISTFILE = RCDIR + '/history'
 TMPDIR = RCDIR + '/tmp'
 REPARAM = compile(':(?P<param>\w+)')
+REPLSQL = compile('.*END\s*;\s*$', DOTALL)
 SIZETIME = .2
 MAXWIDTH = 50
 OBJECTS = 'usage', 'systables', 'tables', 'indices' # Don't encourage 'indexes'
@@ -27,6 +28,10 @@ VIMCMDS = '+set %s titlestring=%s\\ -\\ sql"'
 
 # TODO Display progress?
 # TODO Page based on all rows (since we only display at the end)
+# TODO Redisplay to handle window resizes
+# TODO Page anything
+# TODO Update completion when new tables
+# TODO Calibrate column width on number of rows in addition to time
 
 def duration(d):
     d = int(d)
@@ -105,7 +110,10 @@ def vim(f, title, wrap):
 def execute(line, cursor, params, f, title):
     try:
         # Query and parameters
-        sql = line.rstrip(';')
+        if REPLSQL.match(line):
+            sql = line
+        else:
+            sql = line.rstrip(';')
         ps = dict((p, params[p]) for p in params if p in REPARAM.findall(sql))
 
         # Display query and parameters in Vim
