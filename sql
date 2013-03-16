@@ -253,8 +253,8 @@ class Cli(cmd.Cmd):
         where = " WHERE table_name = :t"
         sql = select + where
 
-        table = line.rstrip(';').upper()
-        if table == 'PLAN_TABLE':
+        table = line.rstrip(';').lower()
+        if table == 'plan_table':
             table = table + '$'
         execute(sql, self.cursor, {'t': table}, sys.stdout, self.title,
                 self.tables)
