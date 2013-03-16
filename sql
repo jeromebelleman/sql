@@ -315,6 +315,15 @@ class Cli(cmd.Cmd):
             # XXX Check snowplough if problem with Unicode
             execute(line, self.cursor, self.params, f, self.title, self.tables)
 
+    def complete_page(self, text, line, begidx, endidx):
+        _, cmd, cmdline = line.split(' ', 2)
+        if cmd in ('describe', 'desc'):
+            return self.complete_desc(text, cmd + ' ' + cmdline, -1, -1)
+        elif cmd == 'show':
+            return self.complete_show(text, cmd + ' ' + cmdline, -1, -1)
+        else:
+            return self.completedefault(text, cmd + ' ' + cmdline, -1, -1)
+
     def help_page(self):
         print "Display results in Vim instead of stdout"
 
@@ -331,6 +340,10 @@ class Cli(cmd.Cmd):
     def do_describe(self, line):
         describe(line, self.cursor, sys.stdout, self.title, self.tables)
     do_desc = do_describe
+
+    def complete_describe(self, text, line, begidx, endidx):
+        return [t for t in self.tables if t.startswith(text.lower())]
+    complete_desc = complete_describe
 
     def help_describe(self):
         print "Describe table"
