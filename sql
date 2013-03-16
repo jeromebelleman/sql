@@ -132,6 +132,12 @@ def edit(line, cursor, h, title, tables, params):
 
 def show(obj, cursor, f, title, tables, help):
     obj = obj.rstrip(';').lower()
+
+    # To make sure I don't forget adding any new one into OBJECTS
+    if obj not in OBJECTS:
+        help()
+        return
+
     if obj == 'tables':
         # Don't use the in-memory dictionary because we want to display a
         # few extra columns
@@ -174,11 +180,6 @@ def show(obj, cursor, f, title, tables, help):
         tab = " FROM user_ts_quotas"
         sql = select + tab
         execute(sql, cursor, {}, f, title, tables)
-    elif not obj:
-        help()
-    else:
-        article = 'an' if obj[0] in 'aeiou' else 'a'
-        print "Dunno what %s %s is" % (article, obj)
 
 def plan(line, cursor, f, title, tables):
     execute("EXPLAIN PLAN FOR " + line, cursor, {}, sys.stdout, title, tables)
