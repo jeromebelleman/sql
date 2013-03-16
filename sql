@@ -19,20 +19,20 @@ REPLSQL = compile('.*END\s*;\s*$', DOTALL)
 WIDTHCOUNT = 10 # Number of rows to guess width from before breaking
 WIDTHTIME = .2 # Amount of time to guess width from before breaking
 MAXWIDTH = 50
-OBJECTS = 'usage', 'systables', 'tables', 'indices' # Don't encourage 'indexes'
+OBJECTS = 'usage', 'quotas', 'systables', 'tables', \
+          'indices' # Don't encourage 'indexes'
 USEFUL = 'all_objects',  'all_tables',       'all_tab_cols', \
          'all_indexes',  'all_ind_columns', \
          'user_objects', 'user_tables',      'user_tab_cols', \
          'user_indexes', 'user_ind_columns', \
-         'user_segments', 'user_extents', 'user_free_space', 'plan_table'
+         'user_segments', 'user_extents', 'user_free_space', 'user_ts_quotas', \
+         'plan_table'
 VIMCMDS = '+set %s titlestring=%s\\ -\\ sql"'
 
 # TODO Display progress?
 # TODO Redisplay to handle window resizes
 # TODO Page anything
 # TODO Update completion when new tables
-# TODO Use quota table to display usage
-# TODO Add quota tables to systables
 
 def duration(d):
     d = int(d)
@@ -313,6 +313,7 @@ Assign value to parameter. E.g.:
         if obj == 'tables':
             # TODO Use in-memory dictionary 
             sql = "SELECT table_name, tablespace_name FROM user_tables"
+            execute(sql, self.cursor, {}, sys.stdout, self.title)
         elif obj == 'systables':
             # Not using it here anymore but note that all_tab_cols has more
             # than all_tables, for some reason
@@ -322,7 +323,6 @@ Assign value to parameter. E.g.:
                 def __iter__(self):
                     return FakeCursor.useful
             table(FakeCursor(), sys.stdout, MAXWIDTH)
-            return
         elif obj in ('indices', 'indexes'):
             cols = 'user_indexes.table_name', 'index_name', 'uniqueness', \
                    'distinct_keys', 'tablespace_name', 'column_name', \
@@ -332,6 +332,7 @@ Assign value to parameter. E.g.:
             using = " USING (index_name)"
             order = " ORDER BY table_name, column_position"
             sql = select + tab + using + order
+            execute(sql, self.cursor, {}, sys.stdout, self.title)
         elif obj == 'usage':
             cols = 'segment_name', \
                    'TO_CHAR(SUM(bytes) / 1073741824, 9999.9) "USAGE (GB)"'
@@ -339,15 +340,20 @@ Assign value to parameter. E.g.:
             tab = " FROM user_segments"
             group = ' GROUP BY segment_name ORDER BY "USAGE (GB)"'
             sql = select + tab + group
+            execute(sql, self.cursor, {}, sys.stdout, self.title)
+        elif obj == 'quotas':
+            cols = 'tablespace_name', \
+                   'TO_CHAR(bytes / 1048576, 999999.9) "USAGE (MB)"', \
+                   'TO_CHAR(max_bytes / 1048576, 999999.9) "QUOTA (MB)"'
+            select = "SELECT " + ', '.join(cols)
+            tab = " FROM user_ts_quotas"
+            sql = select + tab
+            execute(sql, self.cursor, {}, sys.stdout, self.title)
         elif not obj:
             self.help_show()
-            return
         else:
             article = 'an' if obj[0] in 'aeiou' else 'a'
             print "Dunno what %s %s is" % (article, obj)
-            return
-
-        execute(sql, self.cursor, {}, sys.stdout, self.title)
 
     def complete_show(self, text, line, begidx, endidx):
         return [t for t in OBJECTS if t.startswith(text.lower())]
