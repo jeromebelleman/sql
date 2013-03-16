@@ -31,7 +31,6 @@ VIMCMDS = '+set %s titlestring=%s\\ -\\ sql"'
 
 # TODO Display progress?
 # TODO Redisplay to handle window resizes
-# TODO Page anything
 
 def mkcomplete(cursor, tables):
     tables.clear()
@@ -121,6 +120,17 @@ def vim(f, title, wrap):
     f.flush()
     call(['vim', VIMCMDS % (wrap, title), f.name])
     wintitle(title)
+
+def edit(line, cursor, h, title, tables, params):
+    f = NamedTemporaryFile(dir=os.path.expanduser(TMPDIR))
+    print >>f, line
+    vim(f, title, 'wrap')
+    g = open(f.name)
+    line = g.read().strip() # Can't cope with any trailing newline
+    readline.add_history(line)
+    execute(line, cursor, params, h, title, tables)
+    g.close()
+    f.close()
 
 def show(obj, cursor, f, title, tables, help):
     obj = obj.rstrip(';').lower()
@@ -285,23 +295,11 @@ class Cli(cmd.Cmd):
         return line
 
     def do_edit(self, line):
-        f = NamedTemporaryFile(dir=os.path.expanduser(TMPDIR))
-        print >>f, line
-        vim(f, self.title, 'wrap')
-        g = open(f.name)
-        line = g.read().strip() # Can't cope with any trailing newline
-        readline.add_history(line)
-        execute(line, self.cursor, self.params, sys.stdout, self.title,
-                self.tables)
-        g.close()
-        f.close()
+        edit(line, self.cursor, sys.stdout, self.title, self.tables,
+             self.params)
 
     def help_edit(self):
         print "Edit statement in Vim"
-
-    # TODO
-    # def do_vim(self, line):
-    #     pass
 
     def do_page(self, line):
         f = NamedTemporaryFile(dir=os.path.expanduser(TMPDIR))
@@ -313,6 +311,8 @@ class Cli(cmd.Cmd):
             plan(cmdline, self.cursor, f, self.title, self.tables)
         elif cmd == 'show':
             show(cmdline, self.cursor, f, self.title, self.tables, self.help_show)
+        elif cmd == 'edit':
+            edit(cmdline, self.cursor, f, self.title, self.tables, self.params)
         else:
             # XXX Check snowplough if problem with Unicode
             execute(line, self.cursor, self.params, f, self.title, self.tables)
