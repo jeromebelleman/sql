@@ -16,7 +16,8 @@ HISTFILE = RCDIR + '/history'
 TMPDIR = RCDIR + '/tmp'
 REPARAM = compile(':(?P<param>\w+)')
 REPLSQL = compile('.*END\s*;\s*$', DOTALL)
-SIZETIME = .2
+WIDTHCOUNT = 10 # Number of rows to guess width from before breaking
+WIDTHTIME = .2 # Amount of time to guess width from before breaking
 MAXWIDTH = 50
 OBJECTS = 'usage', 'systables', 'tables', 'indices' # Don't encourage 'indexes'
 USEFUL = 'all_objects',  'all_tables',       'all_tab_cols', \
@@ -30,7 +31,6 @@ VIMCMDS = '+set %s titlestring=%s\\ -\\ sql"'
 # TODO Redisplay to handle window resizes
 # TODO Page anything
 # TODO Update completion when new tables
-# TODO Calibrate column width on number of rows in addition to time
 # TODO Use quota table to display usage
 # TODO Add quota tables to systables
 
@@ -57,10 +57,10 @@ def table(cursor, f, maxw):
     sample = []
     lens = [0] * len(cursor.description)
     t = time()
-    for row in cursor:
+    for j, row in enumerate(cursor):
         # Don't ever break if the outfile isn't stdout: means we're paging and
         # we'll use all the data to define column widths
-        if f == sys.stdout and time() - t > SIZETIME:
+        if f == sys.stdout and time() - t > WIDTHTIME and j > WIDTHCOUNT:
             break
         for i, col in enumerate(row):
             lens[i] = len(str(col)) if len(str(col)) > lens[i] else lens[i]
