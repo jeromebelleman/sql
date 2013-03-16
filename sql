@@ -138,17 +138,14 @@ def show(obj, cursor, f, title, tables, help):
         sql = "SELECT table_name, tablespace_name FROM user_tables"
         execute(sql, cursor, {}, f, title, tables)
     elif obj == 'systables':
-        # Not using it here anymore but note that all_tab_cols has more
-        # than all_tables, for some reason
-
-        # Use a FakeCursor here because we're only interested in a few
-        # select system tables
-        class FakeCursor:
-            description = ('TABLE_NAME', None, None, None, None, None, None),
-            useful = ((t.upper(),) for t in USEFUL)
-            def __iter__(self):
-                return FakeCursor.useful
-        table(FakeCursor(), f, MAXWIDTH)
+        # Seems that all_tab_cols has more than all_tables, for some reason
+        params = dict(('t%d' % i, t.upper()) for i, t in enumerate(USEFUL))
+        select = "SELECT table_name FROM all_tab_cols"
+        where = " WHERE table_name IN (%s)" % \
+            ', '.join(':%s' % k for k in params.keys())
+        group = " GROUP BY table_name ORDER BY table_name"
+        sql = select + where + group
+        execute(sql, cursor, params, f, title, tables)
     elif obj in ('indices', 'indexes'):
         # We don't complete indices so let's not use the in-memory
         # dictionary and just query directly
