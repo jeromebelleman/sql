@@ -122,6 +122,59 @@ def vim(f, title, wrap):
     call(['vim', VIMCMDS % (wrap, title), f.name])
     wintitle(title)
 
+def show(obj, cursor, f, title, tables, help):
+    obj = obj.rstrip(';').lower()
+    if obj == 'tables':
+        # Don't use the in-memory dictionary because we want to display a
+        # few extra columns
+        sql = "SELECT table_name, tablespace_name FROM user_tables"
+        execute(sql, cursor, {}, f, title, tables)
+    elif obj == 'systables':
+        # Not using it here anymore but note that all_tab_cols has more
+        # than all_tables, for some reason
+
+        # Use a FakeCursor here because we're only interested in a few
+        # select system tables
+        class FakeCursor:
+            description = ('TABLE_NAME', None, None, None, None, None, None),
+            useful = ((t.upper(),) for t in USEFUL)
+            def __iter__(self):
+                return FakeCursor.useful
+        table(FakeCursor(), f, MAXWIDTH)
+    elif obj in ('indices', 'indexes'):
+        # We don't complete indices so let's not use the in-memory
+        # dictionary and just query directly
+        cols = 'user_indexes.table_name', 'index_name', 'uniqueness', \
+               'distinct_keys', 'tablespace_name', 'column_name', \
+               'column_position'
+        select = "SELECT " + ', '.join(cols)
+        tab = " FROM user_indexes JOIN user_ind_columns"
+        using = " USING (index_name)"
+        order = " ORDER BY table_name, column_position"
+        sql = select + tab + using + order
+        execute(sql, cursor, {}, f, title, tables)
+    elif obj == 'usage':
+        cols = 'segment_name', \
+               'TO_CHAR(SUM(bytes) / 1073741824, 9999.9) "USAGE (GB)"'
+        select = "SELECT " + ', '.join(cols)
+        tab = " FROM user_segments"
+        group = ' GROUP BY segment_name ORDER BY "USAGE (GB)"'
+        sql = select + tab + group
+        execute(sql, cursor, {}, f, title, tables)
+    elif obj == 'quotas':
+        cols = 'tablespace_name', \
+               'TO_CHAR(bytes / 1048576, 999999.9) "USAGE (MB)"', \
+               'TO_CHAR(max_bytes / 1048576, 999999.9) "QUOTA (MB)"'
+        select = "SELECT " + ', '.join(cols)
+        tab = " FROM user_ts_quotas"
+        sql = select + tab
+        execute(sql, cursor, {}, f, title, tables)
+    elif not obj:
+        help()
+    else:
+        article = 'an' if obj[0] in 'aeiou' else 'a'
+        print "Dunno what %s %s is" % (article, obj)
+
 def plan(line, cursor, f, title, tables):
     execute("EXPLAIN PLAN FOR " + line, cursor, {}, sys.stdout, title, tables)
 
@@ -258,6 +311,8 @@ class Cli(cmd.Cmd):
             describe(cmdline, self.cursor, f, self.title, self.tables)
         elif cmd == 'plan':
             plan(cmdline, self.cursor, f, self.title, self.tables)
+        elif cmd == 'show':
+            show(cmdline, self.cursor, f, self.title, self.tables, self.help_show)
         else:
             # XXX Check snowplough if problem with Unicode
             execute(line, self.cursor, self.params, f, self.title, self.tables)
@@ -331,57 +386,8 @@ Assign value to parameter. E.g.:
                [c.lower() for c in columns if c.startswith(text.lower())]
 
     def do_show(self, line):
-        obj = line.rstrip(';').lower()
-        if obj == 'tables':
-            # Don't use the in-memory dictionary because we want to display a
-            # few extra columns
-            sql = "SELECT table_name, tablespace_name FROM user_tables"
-            execute(sql, self.cursor, {}, sys.stdout, self.title, self.tables)
-        elif obj == 'systables':
-            # Not using it here anymore but note that all_tab_cols has more
-            # than all_tables, for some reason
-
-            # Use a FakeCursor here because we're only interested in a few
-            # select system tables
-            class FakeCursor:
-                description = ('TABLE_NAME', None, None, None, None, None, None),
-                useful = ((t.upper(),) for t in USEFUL)
-                def __iter__(self):
-                    return FakeCursor.useful
-            table(FakeCursor(), sys.stdout, MAXWIDTH)
-        elif obj in ('indices', 'indexes'):
-            # We don't complete indices so let's not use the in-memory
-            # dictionary and just query directly
-            cols = 'user_indexes.table_name', 'index_name', 'uniqueness', \
-                   'distinct_keys', 'tablespace_name', 'column_name', \
-                   'column_position'
-            select = "SELECT " + ', '.join(cols)
-            tab = " FROM user_indexes JOIN user_ind_columns"
-            using = " USING (index_name)"
-            order = " ORDER BY table_name, column_position"
-            sql = select + tab + using + order
-            execute(sql, self.cursor, {}, sys.stdout, self.title, self.tables)
-        elif obj == 'usage':
-            cols = 'segment_name', \
-                   'TO_CHAR(SUM(bytes) / 1073741824, 9999.9) "USAGE (GB)"'
-            select = "SELECT " + ', '.join(cols)
-            tab = " FROM user_segments"
-            group = ' GROUP BY segment_name ORDER BY "USAGE (GB)"'
-            sql = select + tab + group
-            execute(sql, self.cursor, {}, sys.stdout, self.title, self.tables)
-        elif obj == 'quotas':
-            cols = 'tablespace_name', \
-                   'TO_CHAR(bytes / 1048576, 999999.9) "USAGE (MB)"', \
-                   'TO_CHAR(max_bytes / 1048576, 999999.9) "QUOTA (MB)"'
-            select = "SELECT " + ', '.join(cols)
-            tab = " FROM user_ts_quotas"
-            sql = select + tab
-            execute(sql, self.cursor, {}, sys.stdout, self.title, self.tables)
-        elif not obj:
-            self.help_show()
-        else:
-            article = 'an' if obj[0] in 'aeiou' else 'a'
-            print "Dunno what %s %s is" % (article, obj)
+        show(line, self.cursor, sys.stdout, self.title, self.tables,
+             self.help_show)
 
     def complete_show(self, text, line, begidx, endidx):
         return [t for t in OBJECTS if t.startswith(text.lower())]
