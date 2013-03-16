@@ -122,6 +122,18 @@ def vim(f, title, wrap):
     call(['vim', VIMCMDS % (wrap, title), f.name])
     wintitle(title)
 
+def describe(table, cursor, f, title, tables):
+    cols = 'column_name', 'nullable', 'data_type', \
+           'data_length', 'data_precision', 'data_scale'
+    select = "SELECT " + ', '.join(cols) + " FROM all_tab_cols"
+    where = " WHERE table_name = :t"
+    sql = select + where
+
+    table = table.rstrip(';').upper()
+    if table == 'PLAN_TABLE':
+        table = table + '$'
+    execute(sql, cursor, {'t': table}, f, title, tables)
+
 def execute(line, cursor, params, f, title, tables):
     try:
         # Query and parameters
@@ -230,8 +242,13 @@ class Cli(cmd.Cmd):
 
     def do_page(self, line):
         f = NamedTemporaryFile(dir=os.path.expanduser(TMPDIR))
-        # XXX Check snowplough if problem with Unicode
-        execute(line, self.cursor, self.params, f, self.title, self.tables)
+
+        cmd, cmdline = line.split(' ', 1)
+        if cmd in ('describe', 'desc'):
+            describe(cmdline, self.cursor, f, self.title, self.tables)
+        else:
+            # XXX Check snowplough if problem with Unicode
+            execute(line, self.cursor, self.params, f, self.title, self.tables)
 
     def help_page(self):
         print "Display results in Vim instead of stdout"
@@ -247,17 +264,7 @@ class Cli(cmd.Cmd):
         print "Display set parameters and their value"
 
     def do_describe(self, line):
-        cols = 'column_name', 'nullable', 'data_type', \
-               'data_length', 'data_precision', 'data_scale'
-        select = "SELECT " + ', '.join(cols) + " FROM all_tab_cols"
-        where = " WHERE table_name = :t"
-        sql = select + where
-
-        table = line.rstrip(';').lower()
-        if table == 'plan_table':
-            table = table + '$'
-        execute(sql, self.cursor, {'t': table}, sys.stdout, self.title,
-                self.tables)
+        describe(line, self.cursor, sys.stdout, self.title, self.tables)
     do_desc = do_describe
 
     def help_describe(self):
