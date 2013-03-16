@@ -122,6 +122,16 @@ def vim(f, title, wrap):
     call(['vim', VIMCMDS % (wrap, title), f.name])
     wintitle(title)
 
+def plan(line, cursor, f, title, tables):
+    execute("EXPLAIN PLAN FOR " + line, cursor, {}, sys.stdout, title, tables)
+
+    cols = 'operation', 'options', 'object_name', 'optimizer', 'cost', \
+           'cardinality', 'time'
+    select = "SELECT " + ', '.join(cols) + " FROM plan_table"
+    where = " WHERE plan_id = (SELECT MAX(plan_id) FROM plan_table)"
+    sql = select + where
+    execute(sql, cursor, {}, f, title, tables)
+
 def describe(table, cursor, f, title, tables):
     cols = 'column_name', 'nullable', 'data_type', \
            'data_length', 'data_precision', 'data_scale'
@@ -246,6 +256,8 @@ class Cli(cmd.Cmd):
         cmd, cmdline = line.split(' ', 1)
         if cmd in ('describe', 'desc'):
             describe(cmdline, self.cursor, f, self.title, self.tables)
+        elif cmd == 'plan':
+            plan(cmdline, self.cursor, f, self.title, self.tables)
         else:
             # XXX Check snowplough if problem with Unicode
             execute(line, self.cursor, self.params, f, self.title, self.tables)
@@ -272,14 +284,7 @@ class Cli(cmd.Cmd):
     help_desc = help_describe
 
     def do_plan(self, line):
-        execute("EXPLAIN PLAN FOR " + line, self.cursor, {}, sys.stdout,
-                self.title, self.tables)
-        cols = 'operation', 'options', 'object_name', 'optimizer', 'cost', \
-               'cardinality', 'time'
-        select = "SELECT " + ', '.join(cols) + " FROM plan_table"
-        where = " WHERE plan_id = (SELECT MAX(plan_id) FROM plan_table)"
-        sql = select + where
-        execute(sql, self.cursor, {}, sys.stdout, self.title, self.tables)
+        plan(line, self.cursor, sys.stdout, self.title, self.tables)
 
     def help_plan(self):
         print '''\
