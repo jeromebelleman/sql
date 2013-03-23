@@ -128,7 +128,7 @@ def edit(line, cursor, h, title, tables, params):
     g = open(f.name)
     line = g.read().strip() # Can't cope with any trailing newline
     readline.add_history(line)
-    execute(line, cursor, params, h, title, tables)
+    execute(line.split(None, 1)[1], cursor, params, h, title, tables)
 
 def show(obj, cursor, f, title, tables, help):
     obj = obj.rstrip(';').lower()
