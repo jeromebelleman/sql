@@ -121,14 +121,29 @@ def vim(f, title, wrap):
     call(['vim', VIMCMDS % (wrap, title), f.name])
     wintitle(title)
 
-def edit(line, cursor, h, title, tables, params):
+def edit(line, cursor, title, tables, params, help):
+    # Open command line in editor
     f = NamedTemporaryFile(dir=os.path.expanduser(TMPDIR))
     print >>f, line
     vim(f, title, 'wrap')
+
+    # Read edited command line
     g = open(f.name)
     line = g.read().strip() # Can't cope with any trailing newline
     readline.add_history(line)
-    execute(line.split(None, 1)[1], cursor, params, h, title, tables)
+
+    # Run command
+    cmd, subline = line.split(None, 1)
+    if cmd in ('describe', 'desc'):
+        describe(subline, cursor, sys.stdout, title, tables)
+    elif cmd == 'plan':
+        plan(subline, cursor, sys.stdout, title, tables)
+    elif cmd == 'show':
+        show(subline, cursor, sys.stdout, title, tables, help)
+    elif cmd == 'page':
+        page(subline, cursor, title, tables, params, help)
+    else:
+        execute(line, cursor, params, sys.stdout, title, tables)
 
 def show(obj, cursor, f, title, tables, help):
     obj = obj.rstrip(';').lower()
@@ -190,6 +205,20 @@ def plan(line, cursor, f, title, tables):
     where = " WHERE plan_id = (SELECT MAX(plan_id) FROM plan_table)"
     sql = select + where
     execute(sql, cursor, {}, f, title, tables)
+
+def page(line, cursor, title, tables, params, help):
+    f = NamedTemporaryFile(dir=os.path.expanduser(TMPDIR))
+
+    cmd, cmdline = line.split(' ', 1)
+    if cmd in ('describe', 'desc'):
+        describe(cmdline, cursor, f, title, tables)
+    elif cmd == 'plan':
+        plan(cmdline, cursor, f, title, tables)
+    elif cmd == 'show':
+        show(cmdline, cursor, f, title, tables, help)
+    else:
+        # XXX Check snowplough if problem with Unicode
+        execute(line, cursor, params, f, title, tables)
 
 def describe(table, cursor, f, title, tables):
     cols = 'column_name', 'nullable', 'data_type', \
@@ -291,27 +320,15 @@ class Cli(cmd.Cmd):
         return line
 
     def do_edit(self, line):
-        edit(line, self.cursor, sys.stdout, self.title, self.tables,
-             self.params)
+        edit(line, self.cursor, self.title, self.tables, self.params,
+             self.help_show)
 
     def help_edit(self):
         print "Edit statement in Vim"
 
     def do_page(self, line):
-        f = NamedTemporaryFile(dir=os.path.expanduser(TMPDIR))
-
-        cmd, cmdline = line.split(' ', 1)
-        if cmd in ('describe', 'desc'):
-            describe(cmdline, self.cursor, f, self.title, self.tables)
-        elif cmd == 'plan':
-            plan(cmdline, self.cursor, f, self.title, self.tables)
-        elif cmd == 'show':
-            show(cmdline, self.cursor, f, self.title, self.tables, self.help_show)
-        elif cmd == 'edit':
-            edit(cmdline, self.cursor, f, self.title, self.tables, self.params)
-        else:
-            # XXX Check snowplough if problem with Unicode
-            execute(line, self.cursor, self.params, f, self.title, self.tables)
+        page(line, self.cursor, self.title, self.tables, self.params,
+             self.help_show)
 
     def complete_page(self, text, line, begidx, endidx):
         _, cmd, cmdline = line.split(' ', 2)
