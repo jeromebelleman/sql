@@ -59,6 +59,33 @@ def termw():
     _, w = out.split()
     return int(w)
 
+def vertical(cursor, f, config):
+    # Some statements have no result (e.g. EXPLAIN)
+    if not cursor.description:
+        return 0
+
+    # Measure header names lengths
+    fmt = '{{:{}}} {{}}'.format(max(len(desc[0])
+                                    for desc in cursor.description))
+
+    # Display data
+    print >> f
+    rowc = 0
+    timestamps = config.getboolean('statements', 'timestamps')
+    for row in cursor:
+        for field, col in zip(cursor.description, row):
+            if timestamps and isinstance(col, datetime):
+                print >> f, fmt.format(field[0], str(mktime(col.timetuple())))
+            else:
+                print >> f, fmt.format(field[0], col)
+        print >> f
+        rowc += 1
+
+    print '\a\r',
+    sys.stdout.flush()
+
+    return rowc
+
 def table(cursor, f, maxw, config):
 
     # Some statements have no result (e.g. EXPLAIN)
@@ -134,7 +161,7 @@ def vim(f, title, wrap):
     call(['vim', VIMCMDS % (wrap, title), f.name])
     wintitle(title)
 
-def edit(line, cursor, title, tables, params, help):
+def edit(line, cursor, title, tables, params, help, config):
     # Open command line in editor
     f = NamedTemporaryFile(dir=os.path.expanduser(TMPDIR))
     print >>f, line
@@ -148,17 +175,17 @@ def edit(line, cursor, title, tables, params, help):
     # Run command
     cmd, subline = line.split(None, 1)
     if cmd in ('describe', 'desc'):
-        describe(subline, cursor, sys.stdout, title, tables)
+        describe(subline, cursor, sys.stdout, title, tables, config)
     elif cmd == 'plan':
-        plan(subline, cursor, sys.stdout, title, tables)
+        plan(subline, cursor, sys.stdout, title, tables, config)
     elif cmd == 'show':
-        show(subline, cursor, sys.stdout, title, tables, help)
+        show(subline, cursor, sys.stdout, title, tables, help, config)
     elif cmd == 'page':
-        page(subline, cursor, title, tables, params, help)
+        page(subline, cursor, title, tables, params, help, config)
     else:
-        execute(line, cursor, params, sys.stdout, title, tables)
+        execute(line, cursor, params, sys.stdout, title, tables, config)
 
-def show(obj, cursor, f, title, tables, help):
+def show(obj, cursor, f, title, tables, help, config):
     obj = obj.rstrip(';').lower()
 
     # To make sure I don't forget adding any new one into OBJECTS
@@ -170,7 +197,7 @@ def show(obj, cursor, f, title, tables, help):
         # Don't use the in-memory dictionary because we want to display a
         # few extra columns
         sql = "SELECT table_name, tablespace_name FROM user_tables"
-        execute(sql, cursor, {}, f, title, tables)
+        execute(sql, cursor, {}, f, title, tables, config)
     elif obj == 'systables':
         # Seems that all_tab_cols has more than all_tables, for some reason
         params = dict(('t%d' % i, t.upper()) for i, t in enumerate(USEFUL))
@@ -179,7 +206,7 @@ def show(obj, cursor, f, title, tables, help):
             ', '.join(':%s' % k for k in params.keys())
         group = " GROUP BY table_name ORDER BY table_name"
         sql = select + where + group
-        execute(sql, cursor, params, f, title, tables)
+        execute(sql, cursor, params, f, title, tables, config)
     elif obj in ('indices', 'indexes'):
         # We don't complete indices so let's not use the in-memory
         # dictionary and just query directly
@@ -191,7 +218,7 @@ def show(obj, cursor, f, title, tables, help):
         using = " USING (index_name)"
         order = " ORDER BY table_name, column_position"
         sql = select + tab + using + order
-        execute(sql, cursor, {}, f, title, tables)
+        execute(sql, cursor, {}, f, title, tables, config)
     elif obj == 'usage':
         cols = 'segment_name', \
                'TO_CHAR(SUM(bytes) / 1073741824, 9999.9) "USAGE (GB)"'
@@ -199,7 +226,7 @@ def show(obj, cursor, f, title, tables, help):
         tab = " FROM user_segments"
         group = ' GROUP BY segment_name ORDER BY "USAGE (GB)"'
         sql = select + tab + group
-        execute(sql, cursor, {}, f, title, tables)
+        execute(sql, cursor, {}, f, title, tables, config)
     elif obj == 'quotas':
         cols = 'tablespace_name', \
                'TO_CHAR(bytes / 1048576, 999999.9) "USAGE (MB)"', \
@@ -207,33 +234,34 @@ def show(obj, cursor, f, title, tables, help):
         select = "SELECT " + ', '.join(cols)
         tab = " FROM user_ts_quotas"
         sql = select + tab
-        execute(sql, cursor, {}, f, title, tables)
+        execute(sql, cursor, {}, f, title, tables, config)
 
-def plan(line, cursor, f, title, tables):
-    execute("EXPLAIN PLAN FOR " + line, cursor, {}, sys.stdout, title, tables)
+def plan(line, cursor, f, title, tables, config):
+    execute("EXPLAIN PLAN FOR " + line, cursor, {}, sys.stdout,
+            title, tables, config)
 
     cols = 'operation', 'options', 'object_name', 'optimizer', 'cost', \
            'cardinality', 'time'
     select = "SELECT " + ', '.join(cols) + " FROM plan_table"
     where = " WHERE plan_id = (SELECT MAX(plan_id) FROM plan_table)"
     sql = select + where
-    execute(sql, cursor, {}, f, title, tables)
+    execute(sql, cursor, {}, f, title, tables, config)
 
-def page(line, cursor, title, tables, params, help):
+def page(line, cursor, title, tables, params, help, config):
     f = NamedTemporaryFile(dir=os.path.expanduser(TMPDIR))
 
     cmd, cmdline = line.split(' ', 1)
     if cmd in ('describe', 'desc'):
-        describe(cmdline, cursor, f, title, tables)
+        describe(cmdline, cursor, f, title, tables, config)
     elif cmd == 'plan':
-        plan(cmdline, cursor, f, title, tables)
+        plan(cmdline, cursor, f, title, tables, config)
     elif cmd == 'show':
-        show(cmdline, cursor, f, title, tables, help)
+        show(cmdline, cursor, f, title, tables, help, config)
     else:
         # XXX Check snowplough if problem with Unicode
-        execute(line, cursor, params, f, title, tables)
+        execute(line, cursor, params, f, title, tables, config)
 
-def describe(table, cursor, f, title, tables):
+def describe(table, cursor, f, title, tables, config):
     cols = 'column_name', 'nullable', 'data_type', \
            'data_length', 'data_precision', 'data_scale'
     select = "SELECT " + ', '.join(cols) + " FROM all_tab_cols"
@@ -243,7 +271,7 @@ def describe(table, cursor, f, title, tables):
     table = table.rstrip(';').upper()
     if table == 'PLAN_TABLE':
         table = table + '$'
-    execute(sql, cursor, {'t': table}, f, title, tables)
+    execute(sql, cursor, {'t': table}, f, title, tables, config)
 
 def execute(line, cursor, params, f, title, tables, config):
     try:
@@ -262,10 +290,13 @@ def execute(line, cursor, params, f, title, tables, config):
         # Query and display results
         t = time()
         cursor.execute(sql, ps)
-        if f == sys.stdout:
-            rowc = table(cursor, f, MAXWIDTH, config)
+        if config.getboolean('statements', 'vertical'):
+            rowc = vertical(cursor, f, config)
         else:
-            rowc = table(cursor, f, None, config)
+            if f == sys.stdout:
+                rowc = table(cursor, f, MAXWIDTH, config)
+            else:
+                rowc = table(cursor, f, None, config)
 
         # Time query and retrieval
         if f == sys.stdout:
@@ -338,14 +369,14 @@ class Cli(cmd.Cmd):
 
     def do_edit(self, line):
         edit(line, self.cursor, self.title, self.tables, self.params,
-             self.help_show)
+             self.help_show, self.config)
 
     def help_edit(self):
         print "Edit statement in Vim"
 
     def do_page(self, line):
         page(line, self.cursor, self.title, self.tables, self.params,
-             self.help_show)
+             self.help_show, self.config)
 
     def complete_page(self, text, line, begidx, endidx):
         _, cmd, cmdline = line.split(' ', 2)
@@ -370,7 +401,8 @@ class Cli(cmd.Cmd):
         print "Display set parameters and their value"
 
     def do_describe(self, line):
-        describe(line, self.cursor, sys.stdout, self.title, self.tables)
+        describe(line, self.cursor, sys.stdout, self.title,
+                 self.tables, self.config)
     do_desc = do_describe
 
     def complete_describe(self, text, line, begidx, endidx):
@@ -382,7 +414,8 @@ class Cli(cmd.Cmd):
     help_desc = help_describe
 
     def do_plan(self, line):
-        plan(line, self.cursor, sys.stdout, self.title, self.tables)
+        plan(line, self.cursor, sys.stdout, self.title,
+             self.tables, self.config)
 
     def help_plan(self):
         print '''\
@@ -430,13 +463,14 @@ Assign value to parameter. E.g.:
 
     def do_show(self, line):
         show(line, self.cursor, sys.stdout, self.title, self.tables,
-             self.help_show)
+             self.help_show, self.config)
 
     def complete_show(self, text, line, begidx, endidx):
         return [t for t in OBJECTS if t.startswith(text.lower())]
 
     def do_readconf(self, _):
-        self.config = ConfigParser.SafeConfigParser({'timestamps': 'false'})
+        self.config = ConfigParser.SafeConfigParser({'timestamps': 'false',
+                                                     'vertical':   'false'})
         self.config.read(os.path.expanduser(self.configfile))
 
     def help_show(self):
