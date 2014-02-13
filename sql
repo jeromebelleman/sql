@@ -5,11 +5,12 @@ import cmd
 import readline
 from getpass import getpass
 import cx_Oracle
-from time import time, sleep
+from time import time, sleep, mktime
 from subprocess import Popen, PIPE, call
 from re import compile, IGNORECASE, DOTALL
 from datetime import datetime, date, timedelta
 from tempfile import NamedTemporaryFile
+import ConfigParser
 
 RCDIR = '~/.sql'
 HISTFILE = RCDIR + '/history'
@@ -58,7 +59,7 @@ def termw():
     _, w = out.split()
     return int(w)
 
-def table(cursor, f, maxw):
+def table(cursor, f, maxw, config):
 
     # Some statements have no result (e.g. EXPLAIN)
     if not cursor.description:
@@ -102,9 +103,21 @@ def table(cursor, f, maxw):
     for result in sample, cursor:
         for row in result:
             if maxw:
-                print >>f, fmt.format(*[str(r)[:maxw] for r in row])
+                if config.getboolean('statements', 'timestamps'):
+                    print >>f, fmt.format(*[str(mktime(r.timetuple()))[:maxw]
+                                            if isinstance(r, datetime)
+                                            else str(r)[:maxw]
+                                            for r in row])
+                else:
+                    print >>f, fmt.format(*[str(r)[:maxw] for r in row])
             else:
-                print >>f, fmt.format(*[str(r) for r in row])
+                if config.getboolean('statements', 'timestamps'):
+                    print >>f, fmt.format(*[str(mktime(r.timetuple()))
+                                            if isinstance(r, datetime)
+                                            else str(r)
+                                            for r in row])
+                else:
+                    print >>f, fmt.format(*[str(r)[:maxw] for r in row])
             rowc += 1
 
     # Footers
@@ -232,7 +245,7 @@ def describe(table, cursor, f, title, tables):
         table = table + '$'
     execute(sql, cursor, {'t': table}, f, title, tables)
 
-def execute(line, cursor, params, f, title, tables):
+def execute(line, cursor, params, f, title, tables, config):
     try:
         # Query and parameters
         if REPLSQL.match(line):
@@ -250,9 +263,9 @@ def execute(line, cursor, params, f, title, tables):
         t = time()
         cursor.execute(sql, ps)
         if f == sys.stdout:
-            rowc = table(cursor, f, MAXWIDTH)
+            rowc = table(cursor, f, MAXWIDTH, config)
         else:
-            rowc = table(cursor, f, None)
+            rowc = table(cursor, f, None, config)
 
         # Time query and retrieval
         if f == sys.stdout:
@@ -289,10 +302,14 @@ def prompt(title):
     return title + '% '
 
 class Cli(cmd.Cmd):
-    def __init__(self, username, password, tns):
+    def __init__(self, username, password, tns, configfile):
         cmd.Cmd.__init__(self)
 
         self.params = {}
+
+        # Read config file
+        self.configfile = configfile
+        self.do_readconf(None)
 
         # Set prompt and window title
         self.title = "%s@%s" % (username, tns)
@@ -344,7 +361,7 @@ class Cli(cmd.Cmd):
 
     def default(self, line):
         execute(line, self.cursor, self.params, sys.stdout, self.title,
-                self.tables)
+                self.tables, self.config)
 
     def do_params(self, _):
         print self.params
@@ -418,6 +435,10 @@ Assign value to parameter. E.g.:
     def complete_show(self, text, line, begidx, endidx):
         return [t for t in OBJECTS if t.startswith(text.lower())]
 
+    def do_readconf(self, _):
+        self.config = ConfigParser.SafeConfigParser({'timestamps': 'false'})
+        self.config.read(os.path.expanduser(self.configfile))
+
     def help_show(self):
         print "Show objects: %s" % ', '.join(OBJECTS)
 
@@ -435,6 +456,7 @@ def main():
     p = argparse.ArgumentParser()
     p.add_argument('tns')
     p.add_argument('-u', '--user')
+    p.add_argument('-c', '--config', help="config file", default='~/.sql.cfg')
     args = p.parse_args()
 
     if not os.path.isdir(os.path.expanduser(RCDIR)):
@@ -452,7 +474,8 @@ def main():
         print
         sys.exit(0)
 
-    cli = Cli(username, password, args.tns)
+    # Run CLI
+    cli = Cli(username, password, args.tns, args.config)
     while True:
         try:
             cli.cmdloop()
