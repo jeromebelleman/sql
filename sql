@@ -323,8 +323,12 @@ def execute(line, cursor, params, f, title, tables, config):
             mkcomplete(cursor, tables)
 
     except cx_Oracle.DatabaseError, e:
-        print ' ' * (len(prompt(title)) + e.args[0].offset) + '*'
-        print str(e)[:-1]
+        if e[0].code == 2396:
+            print "Exceeded maximum idle time - reconnecting..."
+            self.connect()
+        else:
+            print ' ' * (len(prompt(title)) + e.args[0].offset) + '*'
+            print str(e)[:-1]
 
 def wintitle(title):
     print "\033]0;%s - sql\007\r" % title,
@@ -352,16 +356,23 @@ class Cli(cmd.Cmd):
             readline.read_history_file(os.path.expanduser(HISTFILE))
 
         # Connect
-        try:
-            self.connection = cx_Oracle.connect(username, password, tns)
-            self.cursor = self.connection.cursor()
-        except cx_Oracle.DatabaseError, e:
-            print str(e)[:-1]
-            sys.exit(1)
+        self.username = username
+        self.password = password
+        self.tns = tns
+        self.connect()
 
         # Gather table information
         self.tables = {}
         mkcomplete(self.cursor, self.tables)
+
+    def connect(self):
+        try:
+            self.connection = cx_Oracle.connect(self.username, self.password,
+                                                self.tns)
+            self.cursor = self.connection.cursor()
+        except cx_Oracle.DatabaseError, e:
+            print str(e)[:-1]
+            sys.exit(1)
 
     def precmd(self, line):
         readline.write_history_file(os.path.expanduser(HISTFILE))
