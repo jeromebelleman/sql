@@ -340,7 +340,7 @@ class Cli(cmd.Cmd):
 
         # Read config file
         self.configfile = configfile
-        self.do_readconf(None)
+        self.readconf()
 
         # Set prompt and window title
         self.title = "%s@%s" % (username, tns)
@@ -468,10 +468,17 @@ Assign value to parameter. E.g.:
     def complete_show(self, text, line, begidx, endidx):
         return [t for t in OBJECTS if t.startswith(text.lower())]
 
-    def do_readconf(self, _):
+    def readconf(self):
         self.config = ConfigParser.SafeConfigParser({'timestamps': 'false',
                                                      'vertical':   'false'})
-        self.config.read(os.path.expanduser(self.configfile))
+        self.config.read(self.configfile)
+
+    def do_conf(self, _):
+        if os.path.exists(self.configfile):
+            fhl = open(self.configfile)
+            vim(fhl, self.title, 'wrap')
+            fhl.close()
+        self.readconf()
 
     def help_show(self):
         print "Show objects: %s" % ', '.join(OBJECTS)
@@ -490,7 +497,8 @@ def main():
     p = argparse.ArgumentParser()
     p.add_argument('tns')
     p.add_argument('-u', '--user')
-    p.add_argument('-c', '--config', help="config file", default='~/.sql.cfg')
+    p.add_argument('-c', '--config', help="config file", default='~/.sql.cfg',
+                   type=os.path.expanduser)
     args = p.parse_args()
 
     if not os.path.isdir(os.path.expanduser(RCDIR)):
