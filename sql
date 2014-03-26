@@ -484,6 +484,9 @@ Assign value to parameter. E.g.:
                                                      'vertical':   'false'})
         self.config.read(self.configfile)
 
+    def do_reset(self, _):
+        call(['/usr/bin/reset'])
+
     def do_conf(self, _):
         if os.path.exists(self.configfile):
             fhl = open(self.configfile)
