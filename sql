@@ -32,6 +32,7 @@ VIMCMDS = '+set %s titlestring=%s\\ -\\ sql"'
 
 # TODO Display progress?
 # TODO Redisplay to handle window resizes
+# TODO Password from environment variable
 
 def mkcomplete(cursor, tables):
     tables.clear()
@@ -161,175 +162,6 @@ def vim(f, title, wrap):
     call(['vim', VIMCMDS % (wrap, title), f.name])
     wintitle(title)
 
-def edit(line, cursor, title, tables, params, help, config):
-    # Open command line in editor
-    f = NamedTemporaryFile(dir=os.path.expanduser(TMPDIR))
-    print >>f, line
-    vim(f, title, 'wrap')
-
-    # Read edited command line
-    g = open(f.name)
-    line = g.read().strip() # Can't cope with any trailing newline
-    readline.add_history(line)
-
-    # Run command
-    cmd, subline = line.split(None, 1)
-    if cmd in ('describe', 'desc'):
-        describe(subline, cursor, sys.stdout, title, tables, config)
-    elif cmd == 'plan':
-        plan(subline, cursor, sys.stdout, title, tables, config)
-    elif cmd == 'show':
-        show(subline, cursor, sys.stdout, title, tables, help, config)
-    elif cmd == 'page':
-        page(subline, cursor, title, tables, params, help, config)
-    else:
-        execute(line, cursor, params, sys.stdout, title, tables, config)
-
-def show(obj, cursor, f, title, tables, help, config):
-    obj = obj.rstrip(';').lower()
-
-    # To make sure I don't forget adding any new one into OBJECTS
-    if obj not in OBJECTS:
-        help()
-        return
-
-    if obj == 'tables':
-        # Don't use the in-memory dictionary because we want to display a
-        # few extra columns
-        sql = "SELECT table_name, tablespace_name FROM user_tables"
-        execute(sql, cursor, {}, f, title, tables, config)
-    elif obj == 'systables':
-        # Seems that all_tab_cols has more than all_tables, for some reason
-        params = dict(('t%d' % i, t.upper()) for i, t in enumerate(USEFUL))
-        select = "SELECT table_name FROM all_tab_cols"
-        where = " WHERE table_name IN (%s)" % \
-            ', '.join(':%s' % k for k in params.keys())
-        group = " GROUP BY table_name ORDER BY table_name"
-        sql = select + where + group
-        execute(sql, cursor, params, f, title, tables, config)
-    elif obj in ('indices', 'indexes'):
-        # We don't complete indices so let's not use the in-memory
-        # dictionary and just query directly
-        cols = 'user_indexes.table_name', 'index_name', 'uniqueness', \
-               'distinct_keys', 'tablespace_name', 'column_name', \
-               'column_position'
-        select = "SELECT " + ', '.join(cols)
-        tab = " FROM user_indexes JOIN user_ind_columns"
-        using = " USING (index_name)"
-        order = " ORDER BY table_name, column_position"
-        sql = select + tab + using + order
-        execute(sql, cursor, {}, f, title, tables, config)
-    elif obj == 'usage':
-        cols = 'segment_name', \
-               'TO_CHAR(SUM(bytes) / 1073741824, 9999.9) "USAGE (GB)"'
-        select = "SELECT " + ', '.join(cols)
-        tab = " FROM user_segments"
-        group = ' GROUP BY segment_name ORDER BY "USAGE (GB)"'
-        sql = select + tab + group
-        execute(sql, cursor, {}, f, title, tables, config)
-    elif obj == 'quotas':
-        cols = 'tablespace_name', \
-               'TO_CHAR(bytes / 1048576, 999999.9) "USAGE (MB)"', \
-               'TO_CHAR(max_bytes / 1048576, 999999.9) "QUOTA (MB)"'
-        select = "SELECT " + ', '.join(cols)
-        tab = " FROM user_ts_quotas"
-        sql = select + tab
-        execute(sql, cursor, {}, f, title, tables, config)
-
-def plan(line, cursor, f, title, tables, config):
-    execute("EXPLAIN PLAN FOR " + line, cursor, {}, sys.stdout,
-            title, tables, config)
-
-    cols = 'operation', 'options', 'object_name', 'optimizer', 'cost', \
-           'cardinality', 'time'
-    select = "SELECT " + ', '.join(cols) + " FROM plan_table"
-    where = " WHERE plan_id = (SELECT MAX(plan_id) FROM plan_table)"
-    sql = select + where
-    execute(sql, cursor, {}, f, title, tables, config)
-
-def page(line, cursor, title, tables, params, help, config):
-    f = NamedTemporaryFile(dir=os.path.expanduser(TMPDIR))
-
-    cmd, cmdline = line.split(' ', 1)
-    if cmd in ('describe', 'desc'):
-        describe(cmdline, cursor, f, title, tables, config)
-    elif cmd == 'plan':
-        plan(cmdline, cursor, f, title, tables, config)
-    elif cmd == 'show':
-        show(cmdline, cursor, f, title, tables, help, config)
-    else:
-        # XXX Check snowplough if problem with Unicode
-        execute(line, cursor, params, f, title, tables, config)
-
-def describe(table, cursor, f, title, tables, config):
-    cols = 'column_name', 'nullable', 'data_type', \
-           'data_length', 'data_precision', 'data_scale'
-    select = "SELECT " + ', '.join(cols) + " FROM all_tab_cols"
-    where = " WHERE table_name = :t"
-    sql = select + where
-
-    table = table.rstrip(';').upper()
-    if table == 'PLAN_TABLE':
-        table = table + '$'
-    execute(sql, cursor, {'t': table}, f, title, tables, config)
-
-def execute(line, cursor, params, f, title, tables, config):
-    try:
-        # Query and parameters
-        if REPLSQL.match(line):
-            sql = line
-        else:
-            sql = line.rstrip(';')
-        ps = dict((p, params[p]) for p in params if p in REPARAM.findall(sql))
-
-        # Display query and parameters in Vim
-        if f != sys.stdout:
-            print >>f, sql
-            print >>f, ps
-
-        # Query and display results
-        t = time()
-        cursor.execute(sql, ps)
-        if config.getboolean('statements', 'vertical'):
-            rowc = vertical(cursor, f, config)
-        else:
-            if f == sys.stdout:
-                rowc = table(cursor, f, MAXWIDTH, config)
-            else:
-                rowc = table(cursor, f, None, config)
-
-        # Time query and retrieval
-        if f == sys.stdout:
-            filehandles = [f]
-        else:
-            filehandles = [f, sys.stdout]
-
-        if rowc:
-            for fh in filehandles:
-                print >>fh, "%d row%s" % (rowc, 's' if rowc > 1 else ''),
-
-                d = duration(time() - t)
-                if d:
-                    print >>fh, "in %s" % d,
-                print >>fh
-
-        # Display in pager if not stdout
-        if f != sys.stdout:
-            vim(f, title, 'nowrap')
-            f.close()
-
-        # Check if tables will be shuffled and whether completion needs updating
-        if [s for s in ('CREATE', 'ALTER', 'DROP') if s in sql.upper()]:
-            mkcomplete(cursor, tables)
-
-    except cx_Oracle.DatabaseError, e:
-        if e[0].code == 2396:
-            print "Exceeded maximum idle time - reconnecting..."
-            self.connect()
-        else:
-            print ' ' * (len(prompt(title)) + e.args[0].offset) + '*'
-            print str(e)[:-1]
-
 def wintitle(title):
     print "\033]0;%s - sql\007\r" % title,
 
@@ -374,20 +206,192 @@ class Cli(cmd.Cmd):
             print str(e)[:-1]
             sys.exit(1)
 
+    def edit(self, line, cursor, title, tables, params, help, config):
+        # Open command line in editor
+        f = NamedTemporaryFile(dir=os.path.expanduser(TMPDIR))
+        print >>f, line
+        vim(f, title, 'wrap')
+
+        # Read edited command line
+        g = open(f.name)
+        line = g.read().strip() # Can't cope with any trailing newline
+        readline.add_history(line)
+
+        # Run command
+        cmd, subline = line.split(None, 1)
+        if cmd in ('describe', 'desc'):
+            self.describe(subline, cursor, sys.stdout, title, tables, config)
+        elif cmd == 'plan':
+            self.plan(subline, cursor, sys.stdout, title, tables, config)
+        elif cmd == 'show':
+            self.show(subline, cursor, sys.stdout, title, tables, help, config)
+        elif cmd == 'page':
+            self.page(subline, cursor, title, tables, params, help, config)
+        else:
+            self.execute(line, cursor, params, sys.stdout,
+                         title, tables, config)
+
+    def show(self, obj, cursor, f, title, tables, help, config):
+        obj = obj.rstrip(';').lower()
+
+        # To make sure I don't forget adding any new one into OBJECTS
+        if obj not in OBJECTS:
+            help()
+            return
+
+        if obj == 'tables':
+            # Don't use the in-memory dictionary because we want to display a
+            # few extra columns
+            sql = "SELECT table_name, tablespace_name FROM user_tables"
+            self.execute(sql, cursor, {}, f, title, tables, config)
+        elif obj == 'systables':
+            # Seems that all_tab_cols has more than all_tables, for some reason
+            params = dict(('t%d' % i, t.upper()) for i, t in enumerate(USEFUL))
+            select = "SELECT table_name FROM all_tab_cols"
+            where = " WHERE table_name IN (%s)" % \
+                ', '.join(':%s' % k for k in params.keys())
+            group = " GROUP BY table_name ORDER BY table_name"
+            sql = select + where + group
+            self.execute(sql, cursor, params, f, title, tables, config)
+        elif obj in ('indices', 'indexes'):
+            # We don't complete indices so let's not use the in-memory
+            # dictionary and just query directly
+            cols = 'user_indexes.table_name', 'index_name', 'uniqueness', \
+                   'distinct_keys', 'tablespace_name', 'column_name', \
+                   'column_position'
+            select = "SELECT " + ', '.join(cols)
+            tab = " FROM user_indexes JOIN user_ind_columns"
+            using = " USING (index_name)"
+            order = " ORDER BY table_name, column_position"
+            sql = select + tab + using + order
+            self.execute(sql, cursor, {}, f, title, tables, config)
+        elif obj == 'usage':
+            cols = 'segment_name', \
+                   'TO_CHAR(SUM(bytes) / 1073741824, 9999.9) "USAGE (GB)"'
+            select = "SELECT " + ', '.join(cols)
+            tab = " FROM user_segments"
+            group = ' GROUP BY segment_name ORDER BY "USAGE (GB)"'
+            sql = select + tab + group
+            self.execute(sql, cursor, {}, f, title, tables, config)
+        elif obj == 'quotas':
+            cols = 'tablespace_name', \
+                   'TO_CHAR(bytes / 1048576, 999999.9) "USAGE (MB)"', \
+                   'TO_CHAR(max_bytes / 1048576, 999999.9) "QUOTA (MB)"'
+            select = "SELECT " + ', '.join(cols)
+            tab = " FROM user_ts_quotas"
+            sql = select + tab
+            self.execute(sql, cursor, {}, f, title, tables, config)
+
+    def plan(self, line, cursor, f, title, tables, config):
+        self.execute("EXPLAIN PLAN FOR " + line, cursor, {}, sys.stdout,
+                     title, tables, config)
+
+        cols = 'operation', 'options', 'object_name', 'optimizer', 'cost', \
+               'cardinality', 'time'
+        select = "SELECT " + ', '.join(cols) + " FROM plan_table"
+        where = " WHERE plan_id = (SELECT MAX(plan_id) FROM plan_table)"
+        sql = select + where
+        self.execute(sql, cursor, {}, f, title, tables, config)
+
+    def page(self, line, cursor, title, tables, params, help, config):
+        f = NamedTemporaryFile(dir=os.path.expanduser(TMPDIR))
+
+        cmd, cmdline = line.split(' ', 1)
+        if cmd in ('describe', 'desc'):
+            self.describe(cmdline, cursor, f, title, tables, config)
+        elif cmd == 'plan':
+            self.plan(cmdline, cursor, f, title, tables, config)
+        elif cmd == 'show':
+            self.show(cmdline, cursor, f, title, tables, help, config)
+        else:
+            # XXX Check snowplough if problem with Unicode
+            self.execute(line, cursor, params, f, title, tables, config)
+
+    def describe(self, table, cursor, f, title, tables, config):
+        cols = 'column_name', 'nullable', 'data_type', \
+               'data_length', 'data_precision', 'data_scale'
+        select = "SELECT " + ', '.join(cols) + " FROM all_tab_cols"
+        where = " WHERE table_name = :t"
+        sql = select + where
+
+        table = table.rstrip(';').upper()
+        if table == 'PLAN_TABLE':
+            table = table + '$'
+        self.execute(sql, cursor, {'t': table}, f, title, tables, config)
+
+    def execute(self, line, cursor, params, f, title, tables, config):
+        try:
+            # Query and parameters
+            if REPLSQL.match(line):
+                sql = line
+            else:
+                sql = line.rstrip(';')
+            ps = dict((p, params[p]) for p in params
+                      if p in REPARAM.findall(sql))
+
+            # Display query and parameters in Vim
+            if f != sys.stdout:
+                print >>f, sql
+                print >>f, ps
+
+            # Query and display results
+            t = time()
+            cursor.execute(sql, ps)
+            if config.getboolean('statements', 'vertical'):
+                rowc = vertical(cursor, f, config)
+            else:
+                if f == sys.stdout:
+                    rowc = table(cursor, f, MAXWIDTH, config)
+                else:
+                    rowc = table(cursor, f, None, config)
+
+            # Time query and retrieval
+            if f == sys.stdout:
+                filehandles = [f]
+            else:
+                filehandles = [f, sys.stdout]
+
+            if rowc:
+                for fh in filehandles:
+                    print >>fh, "%d row%s" % (rowc, 's' if rowc > 1 else ''),
+
+                    d = duration(time() - t)
+                    if d:
+                        print >>fh, "in %s" % d,
+                    print >>fh
+
+            # Display in pager if not stdout
+            if f != sys.stdout:
+                vim(f, title, 'nowrap')
+                f.close()
+
+            # Check if tables will be shuffled and if completion needs updating
+            if [s for s in ('CREATE', 'ALTER', 'DROP') if s in sql.upper()]:
+                mkcomplete(cursor, tables)
+
+        except cx_Oracle.DatabaseError, e:
+            if e[0].code == 2396:
+                print "Exceeded maximum idle time - reconnecting..."
+                self.connect()
+            else:
+                print ' ' * (len(prompt(title)) + e.args[0].offset) + '*'
+                print str(e)[:-1]
+
+
     def precmd(self, line):
         readline.write_history_file(os.path.expanduser(HISTFILE))
         return line
 
     def do_edit(self, line):
-        edit(line, self.cursor, self.title, self.tables, self.params,
-             self.help_show, self.config)
+        self.edit(line, self.cursor, self.title, self.tables, self.params,
+                  self.help_show, self.config)
 
     def help_edit(self):
         print "Edit statement in Vim"
 
     def do_page(self, line):
-        page(line, self.cursor, self.title, self.tables, self.params,
-             self.help_show, self.config)
+        self.page(line, self.cursor, self.title, self.tables, self.params,
+                  self.help_show, self.config)
 
     def complete_page(self, text, line, begidx, endidx):
         _, cmd, cmdline = line.split(' ', 2)
@@ -402,8 +406,8 @@ class Cli(cmd.Cmd):
         print "Display results in Vim instead of stdout"
 
     def default(self, line):
-        execute(line, self.cursor, self.params, sys.stdout, self.title,
-                self.tables, self.config)
+        self.execute(line, self.cursor, self.params, sys.stdout, self.title,
+                     self.tables, self.config)
 
     def do_params(self, _):
         print self.params
@@ -412,8 +416,8 @@ class Cli(cmd.Cmd):
         print "Display set parameters and their value"
 
     def do_describe(self, line):
-        describe(line, self.cursor, sys.stdout, self.title,
-                 self.tables, self.config)
+        self.describe(line, self.cursor, sys.stdout, self.title,
+                      self.tables, self.config)
     do_desc = do_describe
 
     def complete_describe(self, text, line, begidx, endidx):
@@ -425,8 +429,8 @@ class Cli(cmd.Cmd):
     help_desc = help_describe
 
     def do_plan(self, line):
-        plan(line, self.cursor, sys.stdout, self.title,
-             self.tables, self.config)
+        self.plan(line, self.cursor, sys.stdout, self.title,
+                  self.tables, self.config)
 
     def help_plan(self):
         print '''\
@@ -473,8 +477,8 @@ Assign value to parameter. E.g.:
                [c.lower() for c in columns if c.startswith(text.lower())]
 
     def do_show(self, line):
-        show(line, self.cursor, sys.stdout, self.title, self.tables,
-             self.help_show, self.config)
+        self.show(line, self.cursor, sys.stdout, self.title, self.tables,
+                  self.help_show, self.config)
 
     def complete_show(self, text, line, begidx, endidx):
         return [t for t in OBJECTS if t.startswith(text.lower())]
