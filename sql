@@ -33,6 +33,7 @@ VIMCMDS = '+set %s titlestring=%s\\ -\\ sql"'
 # TODO Display progress?
 # TODO Redisplay to handle window resizes
 # TODO Password from environment variable
+# TODO Help menu for the 'help' command
 
 def mkcomplete(cursor, tables):
     tables.clear()
@@ -489,6 +490,7 @@ Assign value to parameter. E.g.:
         self.config.read(self.configfile)
 
     def do_reset(self, _):
+        readline.redisplay()
         call(['/usr/bin/reset'])
 
     def do_conf(self, _):

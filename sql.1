@@ -1,0 +1,111 @@
+.TH "SQL" "1" "April 2014" "" ""
+.hy
+.SH NAME
+.PP
+sql \[en] An Oracle SQL client
+.SH SYNOPSIS
+.PP
+\f[B]sql\f[]\ [\f[B]\-h\f[]]\ [\f[B]\-u\f[]\ \f[I]USER\f[]]\ [\f[B]\-c\f[]\ \f[I]CONFIG\f[]]
+\f[I]tns\f[]
+.SH DESCRIPTION
+.PP
+An Oracle SQL client featuring completion, paging and convenience
+queries.
+.SH CONFIGURATION FILE
+.PP
+You may want to write a configuration file, which is by default expected
+to be \f[B]~/.sql.cfg\f[]:
+.IP
+.nf
+\f[C]
+[statements]\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ 
+
+#\ Display\ date/time\ as\ UNIX\ timestamps\ instead\ of\ the\ default,\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ 
+#\ human\-readable\ format\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ 
+timestamps\ =\ false\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ 
+
+#\ Display\ column\ vertically
+vertical\ \ \ =\ false\ \ \ \ \ 
+\f[]
+.fi
+.SH COMMANDS AND STATEMENTS
+.PP
+You can type regular SQL statements straight into the command line
+interface.
+The following commands are also available:
+.TP
+.B \f[B]conf\f[]
+Open the configuration file in Vim and apply changes immediately after
+it\[aq]s closed.
+.RS
+.RE
+.TP
+.B \f[B]describe\f[], \f[B]desc\f[]
+Describe table.
+.RS
+.RE
+.TP
+.B \f[B]edit\f[]
+Edit statement in Vim.
+.RS
+.RE
+.TP
+.B \f[B]page\f[]
+Display results in Vim instead of stdout.
+.RS
+.RE
+.TP
+.B \f[B]param\f[]
+Assign value to parameter.
+E.g.:
+.RS
+.IP
+.nf
+\f[C]
+param\ t\ =\ date(1984,4,6)
+SELECT\ *\ FROM\ loc\ where\ eventTime\ =\ :t
+\f[]
+.fi
+.PP
+More on parameters in the PARAMETERS section.
+.RE
+.TP
+.B \f[B]params\f[]
+Display set parameters and their value.
+More on parameters in the PARAMETERS section.
+.RS
+.RE
+.TP
+.B \f[B]plan\f[]
+Display query execution plan.
+Note that \f[B]COST\f[] doesn\[aq]t have any particular unit and that
+\f[B]CARDINALITY\f[] is the number of rows accessed.
+\f[B]TIME\f[] is the estimated time in seconds which will be spent.
+.RS
+.RE
+.TP
+.B \f[B]reset\f[]
+Reset terminal.
+.RS
+.RE
+.TP
+.B \f[B]show\f[]
+Show objects: \f[B]usage\f[], \f[B]quotas\f[], \f[B]systables\f[],
+\f[B]tables\f[], \f[B]indices\f[]
+.RS
+.RE
+.SH PARAMETERS
+.PP
+You can specify literal values by assigning parameters, which might be
+convenient if you wish to use Python objects, string which are hard to
+quote or to keep running the same statement over different values.
+E.g.:
+.IP
+.nf
+\f[C]
+param\ t\ =\ datetime(1984,4,6)
+select\ *\ from\ foo\ where\ timestamp\ >\ :t
+\f[]
+.fi
+.SH AUTHORS
+Jérôme Belleman <Jerome.Belleman@cern.ch>.
