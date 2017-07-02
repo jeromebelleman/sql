@@ -1,3 +1,5 @@
+An Oracle SQL client featuring completion, paging and convenience queries.
+
 # NAME
 
 sql – An Oracle SQL client
